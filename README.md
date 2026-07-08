@@ -86,7 +86,14 @@ https://accountability.hiok.dev/telegram/webhook
 
 ## Register Telegram webhook
 
-After Cloudflare Tunnel is working, run this from the server with `.env` loaded:
+After Cloudflare Tunnel is working, run this from the server with `.env` loaded.
+
+Important:
+
+- Telegram webhook `secret_token` only allows `A-Z`, `a-z`, `0-9`, `_`, and `-`.
+- Generate a safe secret with: `python3 -c "import secrets; print(secrets.token_urlsafe(48).rstrip('='))"`
+- After changing `.env`, use `docker compose up -d --force-recreate accountability-bot`; `docker compose restart` does not reload env vars.
+
 
 ```bash
 set -a
