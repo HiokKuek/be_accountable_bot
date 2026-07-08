@@ -15,39 +15,40 @@ SGT = ZoneInfo("Asia/Singapore")
 def build_scheduler(service: AccountabilityService, telegram: TelegramClient) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=SGT)
 
-    def send_to_latest_chat(text: str | None) -> None:
-        if not text:
-            return
-        chat_id = service.db.latest_chat_id()
-        if chat_id is not None:
-            telegram.send_message_sync(chat_id, text)
+    def send_to_all_active_chats(factory) -> None:
+        for chat_id in service.db.active_chat_ids():
+            text = factory(chat_id)
+            if text:
+                telegram.send_message_sync(chat_id, text)
 
     scheduler.add_job(
-        lambda: send_to_latest_chat(service.morning_reminder()),
+        lambda: send_to_all_active_chats(lambda chat_id: service.morning_reminder()),
         CronTrigger(hour=8, minute=0, timezone=SGT),
         id="morning-goal-reminder",
         replace_existing=True,
     )
     scheduler.add_job(
-        lambda: send_to_latest_chat(service.missing_goals_reminder()),
+        lambda: send_to_all_active_chats(lambda chat_id: service.missing_goals_reminder(chat_id=chat_id)),
         CronTrigger(hour=9, minute=30, timezone=SGT),
         id="missing-goals-reminder",
         replace_existing=True,
     )
     scheduler.add_job(
-        lambda: send_to_latest_chat(service.completion_reminder()),
+        lambda: send_to_all_active_chats(lambda chat_id: service.completion_reminder(chat_id=chat_id)),
         CronTrigger(hour=22, minute=0, timezone=SGT),
         id="completion-reminder",
         replace_existing=True,
     )
     scheduler.add_job(
-        lambda: send_to_latest_chat(service.close_day_summary(datetime.now(SGT).date() - timedelta(days=1))),
+        lambda: send_to_all_active_chats(
+            lambda chat_id: service.close_day_summary(chat_id=chat_id, checkin_date=datetime.now(SGT).date() - timedelta(days=1))
+        ),
         CronTrigger(hour=5, minute=0, timezone=SGT),
         id="daily-close",
         replace_existing=True,
     )
     scheduler.add_job(
-        lambda: send_to_latest_chat(service.month_score()),
+        lambda: send_to_all_active_chats(lambda chat_id: service.month_score(chat_id=chat_id)),
         CronTrigger(day="last", hour=21, minute=0, timezone=SGT),
         id="monthly-summary",
         replace_existing=True,

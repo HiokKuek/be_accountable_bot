@@ -1,6 +1,8 @@
 .env
 *.sqlite3
+*.sqlite3.backup.*
 *.db
+data/
 __pycache__/
 .pytest_cache/
 .venv/

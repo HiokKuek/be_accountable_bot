@@ -34,8 +34,8 @@ class AccountabilityService:
         self.db.register_chat(chat_id)
 
         if text.lower().startswith("/register"):
-            self.db.register_user(user_id, username, display_name)
-            users = self.db.active_users()
+            self.db.register_user(user_id, username, display_name, chat_id=chat_id)
+            users = self.db.active_users(chat_id=chat_id)
             roster = "\n".join(f"{idx}. {h(u['display_name'])}" for idx, u in enumerate(users, start=1))
             return f"Registered {h(display_name)} ✅\n\n<b>Current players</b>\n{roster}"
 
@@ -45,7 +45,7 @@ class AccountabilityService:
         if text.lower().startswith("/help"):
             return self.help_text()
 
-        if not self.db.is_registered(user_id):
+        if not self.db.is_registered(user_id, chat_id=chat_id):
             return "Please register first with <code>/register</code> so I know you are part of the accountability challenge."
 
         goals = parse_goals(text)
@@ -67,15 +67,15 @@ class AccountabilityService:
             if count is None:
                 return "Use <code>/done 0</code>, <code>/done 1</code>, <code>/done 2</code>, or <code>/done 3</code>."
             checkin_date = self.current_checkin_date()
-            self.db.upsert_completion(user_id, checkin_date, count)
+            self.db.upsert_completion(user_id, checkin_date, count, chat_id=chat_id)
             result = "Pass ✅" if count >= 2 else "Fail ❌"
             return f"{h(display_name)}: {count}/3 recorded for {checkin_date.isoformat()} — {result}"
 
         if text.lower().startswith("/today"):
-            return self.today_summary(self.current_checkin_date())
+            return self.today_summary(self.current_checkin_date(), chat_id=chat_id)
 
         if text.lower().startswith("/score") or text.lower().startswith("/summary"):
-            return self.month_score()
+            return self.month_score(chat_id=chat_id)
 
         return None
 
@@ -114,8 +114,8 @@ class AccountabilityService:
             f"5. Month end net settlement: more failed days pays ${self.penalty_amount} × difference."
         )
 
-    def today_summary(self, checkin_date: date) -> str:
-        rows = self.db.checkins_for_day(checkin_date)
+    def today_summary(self, checkin_date: date, *, chat_id: int) -> str:
+        rows = self.db.checkins_for_day(checkin_date, chat_id=chat_id)
         if not rows:
             return f"No check-ins recorded yet for {checkin_date.isoformat()}."
         lines = [f"<b>Daily Status — {checkin_date.isoformat()}</b>", ""]
@@ -127,11 +127,14 @@ class AccountabilityService:
             lines.append(f"- {h(row['display_name'])}: {completed_text} — {emoji} {h(result)}")
         return "\n".join(lines)
 
-    def month_score(self) -> str:
+    def month_score(self, *, chat_id: int, year: int | None = None, month: int | None = None) -> str:
         now = datetime.now(SGT)
-        failures = self.db.failed_days_for_month(now.year, now.month)
+        score_year = year or now.year
+        score_month = month or now.month
+        failures = self.db.failed_days_for_month(score_year, score_month, chat_id=chat_id)
         settlement = net_settlement(failures, self.penalty_amount)
-        lines = [f"<b>Score — {now:%B %Y}</b>", ""]
+        month_name = date(score_year, score_month, 1).strftime("%B %Y")
+        lines = [f"<b>Score — {month_name}</b>", ""]
         for name, failed in failures.items():
             lines.append(f"- {h(name)}: {failed} failed day(s)")
         lines.append("")
@@ -148,31 +151,31 @@ class AccountabilityService:
             "Format:\n<code>/goals\n- goal 1\n- goal 2\n- goal 3</code>"
         )
 
-    def missing_goals_reminder(self, checkin_date: date | None = None) -> str | None:
+    def missing_goals_reminder(self, *, chat_id: int, checkin_date: date | None = None) -> str | None:
         day = checkin_date or self.today()
-        missing = self.db.missing_goal_users(day)
+        missing = self.db.missing_goal_users(day, chat_id=chat_id)
         if not missing:
             return "Everyone has submitted goals ✅"
         mentions = ", ".join(self._mention(u) for u in missing)
         return f"<b>Goal reminder ⏰</b>\n\nStill missing goals for {day.isoformat()}: {mentions}"
 
-    def completion_reminder(self, checkin_date: date | None = None) -> str | None:
+    def completion_reminder(self, *, chat_id: int, checkin_date: date | None = None) -> str | None:
         day = checkin_date or self.today()
-        missing = self.db.missing_completion_users(day)
+        missing = self.db.missing_completion_users(day, chat_id=chat_id)
         if not missing:
             return "Everyone has reported completion ✅"
         mentions = ", ".join(self._mention(u) for u in missing)
         return f"<b>Completion reminder 🌙</b>\n\nStill missing <code>/done 0..3</code> for {day.isoformat()}: {mentions}"
 
-    def close_day_summary(self, checkin_date: date | None = None) -> str:
+    def close_day_summary(self, *, chat_id: int, checkin_date: date | None = None) -> str:
         day = checkin_date or (self.today() - timedelta(days=1))
-        self.db.close_day(day)
-        return self.today_summary(day) + "\n\n" + self.month_score()
+        self.db.close_day(day, chat_id=chat_id)
+        return self.today_summary(day, chat_id=chat_id) + "\n\n" + self.month_score(chat_id=chat_id)
 
     def _mention(self, user: dict) -> str:
         if user.get("username"):
             return f"@{h(user['username'])}"
-        user_id = user.get("user_id")
+        user_id = user.get("telegram_user_id")
         display_name = h(user["display_name"])
         if user_id is not None:
             return f'<a href="tg://user?id={int(user_id)}">{display_name}</a>'

@@ -14,12 +14,13 @@ def make_service(tmp_path):
 
 def test_user_facing_text_does_not_show_markdown_heading_markers(tmp_path):
     service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     messages = [
         service.help_text(),
         service.rules_text(),
         service.morning_reminder(),
-        service.today_summary(service.today()),
-        service.month_score(),
+        service.today_summary(service.today(), chat_id=100),
+        service.month_score(chat_id=100),
     ]
     assert all("##" not in message for message in messages)
 
