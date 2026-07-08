@@ -9,6 +9,7 @@ from app.scheduler import build_scheduler
 from app.service import AccountabilityService
 from app.settings import Settings
 from app.telegram_client import TelegramClient
+from app.telegram_updates import bot_was_added_to_chat
 
 settings = Settings()
 db = Database(settings.database_path)
@@ -20,6 +21,7 @@ scheduler = build_scheduler(service, telegram)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
+    await telegram.initialize()
     scheduler.start()
     try:
         yield
@@ -37,6 +39,7 @@ def health() -> dict[str, object]:
         "timezone": settings.timezone,
         "webhook_path": settings.webhook_path,
         "telegram_configured": telegram.enabled(),
+        "telegram_bot_id_known": telegram.bot_id is not None,
     }
 
 
@@ -49,6 +52,15 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
 
     update = await request.json()
+
+    added_chat_id = bot_was_added_to_chat(update, telegram.bot_id)
+    if added_chat_id is not None:
+        message = update.get("message") or {}
+        chat = message.get("chat") or {}
+        db.register_chat(int(added_chat_id), chat.get("title"))
+        await telegram.send_message(int(added_chat_id), service.intro_text())
+        return {"ok": True}
+
     message = update.get("message") or update.get("edited_message")
     if not message:
         return {"ok": True}
