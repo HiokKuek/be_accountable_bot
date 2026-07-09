@@ -1,7 +1,10 @@
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from app.db import Database
 from app.service import AccountabilityService
+
+SGT = ZoneInfo("Asia/Singapore")
 
 
 def make_service(tmp_path):
@@ -36,6 +39,50 @@ def test_handle_goals_and_done(tmp_path):
     response = service.handle_text(1, "ernest", "Ernest", 100, "/done 2")
     assert "2/3" in response
     assert "Pass" in response
+
+
+def test_today_summary_shows_logged_goals_as_pending_before_completion_cutoff(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=100)
+    service.db.upsert_goals(1, day, ["gym", "study", "sleep early"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["work", "run", "read"], late=False, chat_id=100)
+
+    response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 22, 0, tzinfo=SGT))
+
+    assert "cyril" in response
+    assert "1. gym" in response
+    assert "2. study" in response
+    assert "3. sleep early" in response
+    assert "Ernest" in response
+    assert "1. work" in response
+    assert "2. run" in response
+    assert "3. read" in response
+    assert "not reported — ⏳ pending" in response
+    assert "❌ fail" not in response
+
+
+def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+
+    response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 10, 1, tzinfo=SGT))
+
+    assert "cyril: no goals logged — ❌ fail" in response
+
+
+def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.upsert_goals(1, day, ["gym", "study", "sleep early"], late=False, chat_id=100)
+
+    response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 10, 5, 1, tzinfo=SGT))
+
+    assert "cyril" in response
+    assert "not reported — ❌ fail" in response
 
 
 def test_score_uses_net_settlement(tmp_path):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -114,18 +114,38 @@ class AccountabilityService:
             f"5. Month end net settlement: more failed days pays ${self.penalty_amount} × difference."
         )
 
-    def today_summary(self, checkin_date: date, *, chat_id: int) -> str:
+    def today_summary(self, checkin_date: date, *, chat_id: int, now: datetime | None = None) -> str:
         rows = self.db.checkins_for_day(checkin_date, chat_id=chat_id)
         if not rows:
-            return f"No check-ins recorded yet for {checkin_date.isoformat()}."
+            return f"No registered players found for {checkin_date.isoformat()}."
+        now = now or datetime.now(SGT)
         lines = [f"<b>Daily Status — {checkin_date.isoformat()}</b>", ""]
         for row in rows:
             completed = row.get("completed_count")
+            goals = row.get("goals") or []
             completed_text = "not reported" if completed is None else f"{completed}/3"
-            result = row.get("result") or "pending"
+            if not goals:
+                completed_text = "no goals logged"
+            result = self._display_result(row, checkin_date, now=now)
             emoji = "✅" if result == "pass" else "❌" if result == "fail" else "⏳"
             lines.append(f"- {h(row['display_name'])}: {completed_text} — {emoji} {h(result)}")
+            for idx, goal in enumerate(goals, start=1):
+                lines.append(f"  {idx}. {h(goal)}")
         return "\n".join(lines)
+
+    def _display_result(self, row: dict, checkin_date: date, *, now: datetime) -> str:
+        goals = row.get("goals") or []
+        completed = row.get("completed_count")
+        goal_deadline = datetime.combine(checkin_date, time(10, 0), tzinfo=SGT)
+        completion_deadline = datetime.combine(checkin_date + timedelta(days=1), time(5, 0), tzinfo=SGT)
+
+        if not goals:
+            return "fail" if now >= goal_deadline else "pending"
+        if row.get("goals_status") == "late_submitted":
+            return "fail"
+        if completed is None:
+            return "fail" if now >= completion_deadline else "pending"
+        return "pass" if int(completed) >= 2 else "fail"
 
     def month_score(self, *, chat_id: int, year: int | None = None, month: int | None = None) -> str:
         now = datetime.now(SGT)

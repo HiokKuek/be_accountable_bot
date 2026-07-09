@@ -231,7 +231,7 @@ class Database:
                 (checkin_date.isoformat(), chat_id, telegram_user_id),
             ).fetchone()
             completed = existing["completed_count"] if existing else None
-            result = assess_day_result(goals_submitted=True, completed_count=completed)
+            result = assess_day_result(goals_submitted=True, completed_count=completed) if completed is not None else None
             conn.execute(
                 """
                 INSERT INTO checkins(checkin_date, chat_id, telegram_user_id, goals_json, goals_submitted_at, goals_status, completed_count, result, updated_at)
@@ -280,11 +280,14 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT c.*, u.username, u.display_name
-                FROM checkins c
-                JOIN users u ON u.telegram_user_id=c.telegram_user_id
-                JOIN participants p ON p.chat_id=c.chat_id AND p.telegram_user_id=c.telegram_user_id
-                WHERE c.checkin_date=? AND c.chat_id=? AND p.active=1 AND u.active=1
+                SELECT c.*, u.telegram_user_id AS roster_telegram_user_id, u.username, u.display_name
+                FROM participants p
+                JOIN users u ON u.telegram_user_id=p.telegram_user_id
+                LEFT JOIN checkins c
+                  ON c.telegram_user_id=p.telegram_user_id
+                 AND c.chat_id=p.chat_id
+                 AND c.checkin_date=?
+                WHERE p.chat_id=? AND p.active=1 AND u.active=1
                 ORDER BY p.registered_at
                 """,
                 (checkin_date.isoformat(), chat_id),
