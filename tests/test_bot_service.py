@@ -51,16 +51,31 @@ def test_today_summary_shows_logged_goals_as_pending_before_completion_cutoff(tm
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 22, 0, tzinfo=SGT))
 
-    assert "cyril" in response
+    assert "<b>cyril</b>" in response
     assert "1. gym" in response
     assert "2. study" in response
     assert "3. sleep early" in response
-    assert "Ernest" in response
+    assert "<b>Ernest</b>" in response
     assert "1. work" in response
     assert "2. run" in response
     assert "3. read" in response
-    assert "not reported — ⏳ pending" in response
+    assert "Status: ⏳ <b>pending</b> — not reported" in response
     assert "❌ fail" not in response
+
+
+def test_today_summary_separates_players_with_blank_line_and_bolds_names(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=100)
+    service.db.upsert_goals(1, day, ["settle sep coursereg", "chest and back", "read"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["x leetcode", "gym", "read"], late=False, chat_id=100)
+
+    response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 22, 0, tzinfo=SGT))
+
+    assert "<b>cyril</b>\nStatus:" in response
+    assert "\n\n<b>Ernest</b>\nStatus:" in response
+    assert "<b>Goals</b>" in response
 
 
 def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
@@ -70,7 +85,7 @@ def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 10, 1, tzinfo=SGT))
 
-    assert "cyril: no goals logged — ❌ fail" in response
+    assert "Status: ❌ <b>fail</b> — no goals logged" in response
 
 
 def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
@@ -81,8 +96,57 @@ def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_pa
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 10, 5, 1, tzinfo=SGT))
 
-    assert "cyril" in response
-    assert "not reported — ❌ fail" in response
+    assert "<b>cyril</b>" in response
+    assert "Status: ❌ <b>fail</b> — not reported" in response
+
+
+def test_reminders_return_none_when_everyone_has_done_the_required_action(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=100)
+    service.db.upsert_completion(1, day, 2, chat_id=100)
+    service.db.upsert_completion(2, day, 3, chat_id=100)
+
+    assert service.missing_goals_reminder(chat_id=100, checkin_date=day) is None
+    assert service.completion_reminder(chat_id=100, checkin_date=day) is None
+
+
+def test_reminders_tag_only_missing_users(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.register_user(2, None, "Ernest", chat_id=100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+
+    goal_reminder = service.missing_goals_reminder(chat_id=100, checkin_date=day)
+    done_reminder = service.completion_reminder(chat_id=100, checkin_date=day)
+
+    assert '<a href="tg://user?id=2">Ernest</a>' in goal_reminder
+    assert "@cyril" not in goal_reminder
+    assert "@cyril" in done_reminder
+    assert '<a href="tg://user?id=2">Ernest</a>' in done_reminder
+
+
+def test_goal_confirmation_summary_thanks_users_shows_goals_and_qotd(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "cyril", "cyril", chat_id=100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=100)
+    service.db.upsert_goals(1, day, ["settle sep coursereg", "chest and back", "read"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["x leetcode", "gym", "read"], late=False, chat_id=100)
+
+    response = service.goal_confirmation_summary(day, chat_id=100)
+
+    assert "Great thanks for keying your goals" in response
+    assert "<b>cyril</b>" in response
+    assert "1. settle sep coursereg" in response
+    assert "<b>Ernest</b>" in response
+    assert "1. x leetcode" in response
+    assert "<b>QOTD</b>" in response
+    assert "\n\n<b>Ernest</b>" in response
 
 
 def test_score_uses_net_settlement(tmp_path):

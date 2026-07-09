@@ -10,6 +10,16 @@ from app.parsing import parse_done_count, parse_goals
 
 SGT = ZoneInfo("Asia/Singapore")
 
+QOTDS = [
+    "Small disciplines repeated with consistency every day lead to great achievements gained slowly over time.",
+    "You do not rise to the level of your goals. You fall to the level of your systems.",
+    "Success is the product of daily habits—not once-in-a-lifetime transformations.",
+    "Discipline is choosing between what you want now and what you want most.",
+    "The secret of getting ahead is getting started.",
+    "What gets measured gets managed.",
+    "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+]
+
 
 def h(value: object) -> str:
     return escape(str(value), quote=False)
@@ -119,7 +129,7 @@ class AccountabilityService:
         if not rows:
             return f"No registered players found for {checkin_date.isoformat()}."
         now = now or datetime.now(SGT)
-        lines = [f"<b>Daily Status — {checkin_date.isoformat()}</b>", ""]
+        lines = [f"<b>Daily Status — {checkin_date.isoformat()}</b>"]
         for row in rows:
             completed = row.get("completed_count")
             goals = row.get("goals") or []
@@ -128,10 +138,39 @@ class AccountabilityService:
                 completed_text = "no goals logged"
             result = self._display_result(row, checkin_date, now=now)
             emoji = "✅" if result == "pass" else "❌" if result == "fail" else "⏳"
-            lines.append(f"- {h(row['display_name'])}: {completed_text} — {emoji} {h(result)}")
-            for idx, goal in enumerate(goals, start=1):
-                lines.append(f"  {idx}. {h(goal)}")
+            lines.append("")
+            lines.append(f"<b>{h(row['display_name'])}</b>")
+            lines.append(f"Status: {emoji} <b>{h(result)}</b> — {h(completed_text)}")
+            if goals:
+                lines.append("<b>Goals</b>")
+                for idx, goal in enumerate(goals, start=1):
+                    lines.append(f"{idx}. {h(goal)}")
         return "\n".join(lines)
+
+    def goal_confirmation_summary(self, checkin_date: date, *, chat_id: int) -> str:
+        return (
+            "<b>Great thanks for keying your goals</b>\n\n"
+            + self.goals_block(checkin_date, chat_id=chat_id)
+            + "\n\n"
+            + self.qotd(checkin_date)
+        )
+
+    def goals_block(self, checkin_date: date, *, chat_id: int) -> str:
+        rows = self.db.checkins_for_day(checkin_date, chat_id=chat_id)
+        lines = [f"<b>Today's Goals — {checkin_date.isoformat()}</b>"]
+        for row in rows:
+            goals = row.get("goals") or []
+            if not goals:
+                continue
+            lines.append("")
+            lines.append(f"<b>{h(row['display_name'])}</b>")
+            for idx, goal in enumerate(goals, start=1):
+                lines.append(f"{idx}. {h(goal)}")
+        return "\n".join(lines)
+
+    def qotd(self, checkin_date: date) -> str:
+        quote = QOTDS[checkin_date.toordinal() % len(QOTDS)]
+        return f"<b>QOTD</b>\n<i>{h(quote)}</i>"
 
     def _display_result(self, row: dict, checkin_date: date, *, now: datetime) -> str:
         goals = row.get("goals") or []
@@ -175,7 +214,7 @@ class AccountabilityService:
         day = checkin_date or self.today()
         missing = self.db.missing_goal_users(day, chat_id=chat_id)
         if not missing:
-            return "Everyone has submitted goals ✅"
+            return None
         mentions = ", ".join(self._mention(u) for u in missing)
         return f"<b>Goal reminder ⏰</b>\n\nStill missing goals for {day.isoformat()}: {mentions}"
 
@@ -183,7 +222,7 @@ class AccountabilityService:
         day = checkin_date or self.today()
         missing = self.db.missing_completion_users(day, chat_id=chat_id)
         if not missing:
-            return "Everyone has reported completion ✅"
+            return None
         mentions = ", ".join(self._mention(u) for u in missing)
         return f"<b>Completion reminder 🌙</b>\n\nStill missing <code>/done 0..3</code> for {day.isoformat()}: {mentions}"
 

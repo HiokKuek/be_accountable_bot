@@ -74,3 +74,29 @@ def test_delete_user_by_name_removes_group_membership_and_checkins(tmp_path):
     assert deleted == 1
     assert [u["display_name"] for u in db.active_users(chat_id=100)] == ["Ernest"]
     assert db.get_checkin(1, day, chat_id=100) is None
+
+
+def test_all_active_users_have_goals_for_day(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    day = date(2026, 7, 9)
+    db.register_user(1, "cyril", "cyril", chat_id=100)
+    db.register_user(2, "ernest", "Ernest", chat_id=100)
+    db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+
+    assert db.all_active_users_have_goals(day, chat_id=100) is False
+
+    db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=100)
+
+    assert db.all_active_users_have_goals(day, chat_id=100) is True
+
+
+def test_claim_notification_once_is_group_and_day_scoped(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    day = date(2026, 7, 9)
+
+    assert db.claim_notification_once("goals-keyed", day, chat_id=100) is True
+    assert db.claim_notification_once("goals-keyed", day, chat_id=100) is False
+    assert db.claim_notification_once("goals-keyed", day, chat_id=200) is True
+    assert db.claim_notification_once("goals-keyed", date(2026, 7, 10), chat_id=100) is True

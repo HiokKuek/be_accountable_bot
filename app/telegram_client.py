@@ -58,9 +58,9 @@ class TelegramClient:
             )
             response.raise_for_status()
 
-    async def send_message(self, chat_id: int, text: str) -> None:
+    async def send_message(self, chat_id: int, text: str) -> int | None:
         if not self.enabled():
-            return
+            return None
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(
                 f"{self.base_url}/sendMessage",
@@ -72,10 +72,33 @@ class TelegramClient:
                 },
             )
             response.raise_for_status()
+            payload = response.json()
+        result = payload.get("result") or {}
+        message_id = result.get("message_id")
+        return int(message_id) if message_id is not None else None
 
-    def send_message_sync(self, chat_id: int, text: str) -> None:
+    async def pin_chat_message(self, chat_id: int, message_id: int) -> bool:
         if not self.enabled():
-            return
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self.base_url}/pinChatMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "disable_notification": True,
+                    },
+                )
+                response.raise_for_status()
+            return True
+        except Exception:
+            logger.exception("Failed to pin Telegram message")
+            return False
+
+    def send_message_sync(self, chat_id: int, text: str) -> int | None:
+        if not self.enabled():
+            return None
         with httpx.Client(timeout=15) as client:
             response = client.post(
                 f"{self.base_url}/sendMessage",
@@ -87,3 +110,26 @@ class TelegramClient:
                 },
             )
             response.raise_for_status()
+            payload = response.json()
+        result = payload.get("result") or {}
+        message_id = result.get("message_id")
+        return int(message_id) if message_id is not None else None
+
+    def pin_chat_message_sync(self, chat_id: int, message_id: int) -> bool:
+        if not self.enabled():
+            return False
+        try:
+            with httpx.Client(timeout=15) as client:
+                response = client.post(
+                    f"{self.base_url}/pinChatMessage",
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "disable_notification": True,
+                    },
+                )
+                response.raise_for_status()
+            return True
+        except Exception:
+            logger.exception("Failed to pin Telegram message")
+            return False

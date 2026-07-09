@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from app.db import Database
 from app.scheduler import build_scheduler
 from app.service import AccountabilityService
+from app.parsing import parse_goals
 from app.settings import Settings
 from app.telegram_client import TelegramClient
 from app.telegram_updates import bot_was_added_to_chat
@@ -86,4 +87,13 @@ async def telegram_webhook(
     response = service.handle_text(int(user_id), username, display_name, int(chat_id), text)
     if response:
         await telegram.send_message(int(chat_id), response)
+
+    if parse_goals(text) is not None:
+        checkin_date = service.today()
+        if db.all_active_users_have_goals(checkin_date, chat_id=int(chat_id)) and db.claim_notification_once(
+            "goals-keyed", checkin_date, chat_id=int(chat_id)
+        ):
+            message_id = await telegram.send_message(int(chat_id), service.goal_confirmation_summary(checkin_date, chat_id=int(chat_id)))
+            if message_id is not None:
+                await telegram.pin_chat_message(int(chat_id), message_id)
     return {"ok": True}

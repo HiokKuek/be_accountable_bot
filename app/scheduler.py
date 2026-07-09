@@ -33,12 +33,13 @@ def build_scheduler(service: AccountabilityService, telegram: TelegramClient) ->
         id="missing-goals-reminder",
         replace_existing=True,
     )
-    scheduler.add_job(
-        lambda: send_to_all_active_chats(lambda chat_id: service.completion_reminder(chat_id=chat_id)),
-        CronTrigger(hour=22, minute=0, timezone=SGT),
-        id="completion-reminder",
-        replace_existing=True,
-    )
+    for hour in (20, 22):
+        scheduler.add_job(
+            lambda: send_to_all_active_chats(lambda chat_id: service.completion_reminder(chat_id=chat_id)),
+            CronTrigger(hour=hour, minute=0, timezone=SGT),
+            id=f"completion-reminder-{hour}",
+            replace_existing=True,
+        )
     scheduler.add_job(
         lambda: send_to_all_active_chats(
             lambda chat_id: service.close_day_summary(chat_id=chat_id, checkin_date=datetime.now(SGT).date() - timedelta(days=1))

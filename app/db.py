@@ -47,6 +47,14 @@ class Database:
                     registered_at TEXT NOT NULL,
                     PRIMARY KEY(chat_id, telegram_user_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS notifications (
+                    chat_id INTEGER NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE,
+                    notification_date TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    PRIMARY KEY(chat_id, notification_date, kind)
+                );
                 """
             )
             self._ensure_group_scoped_checkins(conn)
@@ -361,6 +369,36 @@ class Database:
 
     def missing_completion_users(self, checkin_date: date, *, chat_id: int) -> list[dict]:
         return self._missing_users(checkin_date, "completion", chat_id=chat_id)
+
+    def all_active_users_have_goals(self, checkin_date: date, *, chat_id: int) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS missing_count
+                FROM participants p
+                JOIN users u ON u.telegram_user_id=p.telegram_user_id
+                LEFT JOIN checkins c
+                  ON c.telegram_user_id=p.telegram_user_id
+                 AND c.chat_id=p.chat_id
+                 AND c.checkin_date=?
+                WHERE p.chat_id=? AND p.active=1 AND u.active=1 AND c.goals_json IS NULL
+                """,
+                (checkin_date.isoformat(), chat_id),
+            ).fetchone()
+        return int(row["missing_count"]) == 0
+
+    def claim_notification_once(self, kind: str, notification_date: date, *, chat_id: int) -> bool:
+        now = datetime.now(SGT).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO chats(chat_id, title, created_at) VALUES (?, NULL, ?)", (chat_id, now))
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO notifications(chat_id, notification_date, kind, sent_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (chat_id, notification_date.isoformat(), kind, now),
+            )
+            return cursor.rowcount == 1
 
     def _missing_users(self, checkin_date: date, field: str, *, chat_id: int) -> list[dict]:
         condition = "c.goals_json IS NULL" if field == "goals" else "c.completed_count IS NULL"
