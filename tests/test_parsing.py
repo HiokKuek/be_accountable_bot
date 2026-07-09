@@ -20,6 +20,22 @@ def test_parse_goals_from_command_with_bullets():
     assert parse_goals(text) == ["investment stuff", "intervals", "read"]
 
 
+def test_parse_goals_preserves_leading_numbers_that_are_part_of_goal_text():
+    text = """/goals
+- 3x leetcode
+- gym
+- read"""
+    assert parse_goals(text) == ["3x leetcode", "gym", "read"]
+
+
+def test_parse_goals_strips_numbered_list_markers_only_when_punctuated():
+    text = """/goals
+1. investment stuff
+2) gym
+3. read"""
+    assert parse_goals(text) == ["investment stuff", "gym", "read"]
+
+
 def test_parse_goals_from_checkins_format():
     text = """8/7 checkins:
 - investment stuff

@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 
 _DONE_RE = re.compile(r"^/done(?:@\w+)?\s+([0-3])\s*$", re.IGNORECASE)
+_BULLET_RE = re.compile(r"^[-*•]\s*")
+_NUMBERED_MARKER_RE = re.compile(r"^\d+[.)]\s+")
 
 
 def parse_done_count(text: str) -> int | None:
@@ -24,7 +26,8 @@ def parse_goals(text: str) -> list[str] | None:
 
     goals: list[str] = []
     for line in lines[1:]:
-        cleaned = re.sub(r"^[-*•\d.)\s]+", "", line).strip()
+        cleaned = _BULLET_RE.sub("", line, count=1).strip()
+        cleaned = _NUMBERED_MARKER_RE.sub("", cleaned, count=1).strip()
         if cleaned:
             goals.append(cleaned)
     return goals if len(goals) == 3 else None
