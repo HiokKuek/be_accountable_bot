@@ -59,7 +59,8 @@ def test_today_summary_shows_logged_goals_as_pending_before_completion_cutoff(tm
     assert "1. work" in response
     assert "2. run" in response
     assert "3. read" in response
-    assert "Status: ⏳ <b>pending</b> — not reported" in response
+    assert "Status: ⏳ pending — not reported" in response
+    assert "<b>pending</b>" not in response
     assert "❌ fail" not in response
 
 
@@ -75,7 +76,8 @@ def test_today_summary_separates_players_with_blank_line_and_bolds_names(tmp_pat
 
     assert "<b>cyril</b>\nStatus:" in response
     assert "\n\n<b>Ernest</b>\nStatus:" in response
-    assert "<b>Goals</b>" in response
+    assert "\nGoals\n" in response
+    assert "<b>Goals</b>" not in response
 
 
 def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
@@ -85,7 +87,7 @@ def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 10, 1, tzinfo=SGT))
 
-    assert "Status: ❌ <b>fail</b> — no goals logged" in response
+    assert "Status: ❌ fail — no goals logged" in response
 
 
 def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
@@ -97,7 +99,7 @@ def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_pa
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 10, 5, 1, tzinfo=SGT))
 
     assert "<b>cyril</b>" in response
-    assert "Status: ❌ <b>fail</b> — not reported" in response
+    assert "Status: ❌ fail — not reported" in response
 
 
 def test_reminders_return_none_when_everyone_has_done_the_required_action(tmp_path):

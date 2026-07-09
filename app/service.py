@@ -140,9 +140,9 @@ class AccountabilityService:
             emoji = "✅" if result == "pass" else "❌" if result == "fail" else "⏳"
             lines.append("")
             lines.append(f"<b>{h(row['display_name'])}</b>")
-            lines.append(f"Status: {emoji} <b>{h(result)}</b> — {h(completed_text)}")
+            lines.append(f"Status: {emoji} {h(result)} — {h(completed_text)}")
             if goals:
-                lines.append("<b>Goals</b>")
+                lines.append("Goals")
                 for idx, goal in enumerate(goals, start=1):
                     lines.append(f"{idx}. {h(goal)}")
         return "\n".join(lines)
