@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_path: Path = Path("/data/accountability.sqlite3")
     penalty_amount: int = 5
     timezone: str = "Asia/Singapore"
+    qotd_api_url: str = "https://zenquotes.io/api/random"
 
     @property
     def webhook_path(self) -> str:

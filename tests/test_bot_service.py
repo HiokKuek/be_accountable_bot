@@ -13,6 +13,17 @@ def make_service(tmp_path):
     return AccountabilityService(db)
 
 
+class FakeQotdClient:
+    def __init__(self, quote="API discipline quote", author="API Author"):
+        self.quote = quote
+        self.author = author
+        self.calls = 0
+
+    def quote_of_the_day(self):
+        self.calls += 1
+        return self.quote, self.author
+
+
 def test_handle_register(tmp_path):
     service = make_service(tmp_path)
     response = service.handle_text(1, "ernest", "Ernest", 100, "/register")
@@ -132,8 +143,11 @@ def test_reminders_tag_only_missing_users(tmp_path):
     assert '<a href="tg://user?id=2">Ernest</a>' in done_reminder
 
 
-def test_goal_confirmation_summary_thanks_users_shows_goals_and_qotd(tmp_path):
-    service = make_service(tmp_path)
+def test_goal_confirmation_summary_thanks_users_shows_goals_and_api_qotd(tmp_path):
+    qotd_client = FakeQotdClient("Consistency beats intensity", "Internet Quote API")
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, qotd_client=qotd_client)
     day = date(2026, 7, 9)
     service.db.register_user(1, "cyril", "cyril", chat_id=100)
     service.db.register_user(2, "ernest", "Ernest", chat_id=100)
@@ -148,7 +162,22 @@ def test_goal_confirmation_summary_thanks_users_shows_goals_and_qotd(tmp_path):
     assert "<b>Ernest</b>" in response
     assert "1. x leetcode" in response
     assert "<b>QOTD</b>" in response
+    assert "<i>Consistency beats intensity</i>" in response
+    assert "— Internet Quote API" in response
     assert "\n\n<b>Ernest</b>" in response
+    assert qotd_client.calls == 1
+
+
+def test_qotd_escapes_api_response_html(tmp_path):
+    qotd_client = FakeQotdClient("<ship> daily", "A&B")
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, qotd_client=qotd_client)
+
+    response = service.qotd()
+
+    assert "&lt;ship&gt; daily" in response
+    assert "A&amp;B" in response
 
 
 def test_score_uses_net_settlement(tmp_path):

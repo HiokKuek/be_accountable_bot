@@ -7,18 +7,9 @@ from zoneinfo import ZoneInfo
 from app.db import Database
 from app.domain import net_settlement
 from app.parsing import parse_done_count, parse_goals
+from app.qotd import QotdApiClient, QotdClient, QotdUnavailable
 
 SGT = ZoneInfo("Asia/Singapore")
-
-QOTDS = [
-    "Small disciplines repeated with consistency every day lead to great achievements gained slowly over time.",
-    "You do not rise to the level of your goals. You fall to the level of your systems.",
-    "Success is the product of daily habits—not once-in-a-lifetime transformations.",
-    "Discipline is choosing between what you want now and what you want most.",
-    "The secret of getting ahead is getting started.",
-    "What gets measured gets managed.",
-    "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
-]
 
 
 def h(value: object) -> str:
@@ -26,9 +17,10 @@ def h(value: object) -> str:
 
 
 class AccountabilityService:
-    def __init__(self, db: Database, *, penalty_amount: int = 5):
+    def __init__(self, db: Database, *, penalty_amount: int = 5, qotd_client: QotdClient | None = None):
         self.db = db
         self.penalty_amount = penalty_amount
+        self.qotd_client = qotd_client or QotdApiClient()
 
     def today(self) -> date:
         return datetime.now(SGT).date()
@@ -152,7 +144,7 @@ class AccountabilityService:
             "<b>Great thanks for keying your goals</b>\n\n"
             + self.goals_block(checkin_date, chat_id=chat_id)
             + "\n\n"
-            + self.qotd(checkin_date)
+            + self.qotd()
         )
 
     def goals_block(self, checkin_date: date, *, chat_id: int) -> str:
@@ -168,9 +160,16 @@ class AccountabilityService:
                 lines.append(f"{idx}. {h(goal)}")
         return "\n".join(lines)
 
-    def qotd(self, checkin_date: date) -> str:
-        quote = QOTDS[checkin_date.toordinal() % len(QOTDS)]
-        return f"<b>QOTD</b>\n<i>{h(quote)}</i>"
+    def qotd(self) -> str:
+        try:
+            quote, author = self.qotd_client.quote_of_the_day()
+        except QotdUnavailable:
+            return "<b>QOTD</b>\n<i>Quote temporarily unavailable.</i>"
+
+        lines = ["<b>QOTD</b>", f"<i>{h(quote)}</i>"]
+        if author:
+            lines.append(f"— {h(author)}")
+        return "\n".join(lines)
 
     def _display_result(self, row: dict, checkin_date: date, *, now: datetime) -> str:
         goals = row.get("goals") or []

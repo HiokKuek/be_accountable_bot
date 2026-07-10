@@ -8,13 +8,15 @@ from app.db import Database
 from app.scheduler import build_scheduler
 from app.service import AccountabilityService
 from app.parsing import parse_goals
+from app.qotd import QotdApiClient
 from app.settings import Settings
 from app.telegram_client import TelegramClient
 from app.telegram_updates import bot_was_added_to_chat
 
 settings = Settings()
 db = Database(settings.database_path)
-service = AccountabilityService(db, penalty_amount=settings.penalty_amount)
+qotd_client = QotdApiClient(api_url=settings.qotd_api_url)
+service = AccountabilityService(db, penalty_amount=settings.penalty_amount, qotd_client=qotd_client)
 telegram = TelegramClient(settings.telegram_bot_token)
 scheduler = build_scheduler(service, telegram)
 
