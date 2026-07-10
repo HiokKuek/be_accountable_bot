@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.qotd import DEFAULT_QOTD_API_URL
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -13,7 +15,7 @@ class Settings(BaseSettings):
     database_path: Path = Path("/data/accountability.sqlite3")
     penalty_amount: int = 5
     timezone: str = "Asia/Singapore"
-    qotd_api_url: str = "https://zenquotes.io/api/random"
+    qotd_api_url: str = DEFAULT_QOTD_API_URL
 
     @property
     def webhook_path(self) -> str:
