@@ -1,7 +1,11 @@
 import httpx
 import pytest
 
-from app.qotd import QotdApiClient, QotdUnavailable
+from app.qotd import DEFAULT_QOTD_API_URL, QotdApiClient, QotdUnavailable
+
+
+def test_default_qotd_api_url_uses_daily_quote_endpoint():
+    assert DEFAULT_QOTD_API_URL == "https://zenquotes.io/api/today"
 
 
 def test_qotd_api_client_parses_zenquotes_response():

@@ -5,7 +5,7 @@ from typing import Protocol
 import httpx
 
 
-DEFAULT_QOTD_API_URL = "https://zenquotes.io/api/random"
+DEFAULT_QOTD_API_URL = "https://zenquotes.io/api/today"
 
 
 class QotdUnavailable(RuntimeError):
