@@ -1,6 +1,6 @@
 # Accountability Bot
 
-A friendly Telegram bot that helps a group stay accountable with daily goals, reminders, status updates, and month-end settlement.
+A friendly Telegram bot that helps a 2-person group stay accountable with daily goals, reminders, status updates, and month-end settlement.
 
 Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
 
@@ -13,13 +13,15 @@ Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
 3. The bot tracks who passed or failed each day.
 4. At month end, the person with more failed days pays the other person based on the settlement rule.
 
-It is designed for Telegram groups, so everyone can see the goals, reminders, and status updates together.
+It is designed for a Telegram group with **2 people**, so both players can see the goals, reminders, and status updates together.
+
+It does **not** run in private messages. If you PM the bot, it will explain that it needs to be added to a 2-person group first.
 
 ## Quick start
 
 ### 1. Add the bot to your Telegram group
 
-Add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to the group where you want to run the accountability challenge.
+Create or choose a Telegram group with exactly **2 people**, then add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to that group.
 
 Once the bot joins, it will introduce itself and explain the basic flow.
 
@@ -257,8 +259,15 @@ If you forget to report completion by **5:00 AM the next day**, the day fails.
 
 The bot tracks each Telegram group separately. If you use it in multiple groups, register and submit goals separately in each group.
 
+### PMing the bot directly
+
+The bot cannot run the challenge in a private chat because both players need to see the same goals, reminders, status, and settlement.
+
+If you message the bot directly, it will give you a friendly intro and ask you to add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to a group with **2 people**.
+
 ## Rules summary
 
+- Use the bot in a Telegram group with **2 people**.
 - Register once with `/register`.
 - Submit exactly 3 goals by **10:00 AM Singapore time**.
 - Report completion with `/done 0`, `/done 1`, `/done 2`, or `/done 3`.

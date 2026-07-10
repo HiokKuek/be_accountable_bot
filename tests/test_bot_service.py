@@ -30,6 +30,29 @@ def test_handle_register(tmp_path):
     assert "Registered Ernest" in response
 
 
+def test_private_chat_commands_get_group_only_intro_and_do_not_register(tmp_path):
+    service = make_service(tmp_path)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/register", chat_type="private")
+
+    assert "can't run in a private chat" in response.lower()
+    assert "group" in response.lower()
+    assert "2 people" in response
+    assert not service.db.is_registered(1, chat_id=100)
+    assert service.db.active_users(chat_id=100) == []
+
+
+def test_group_registration_is_limited_to_two_players(tmp_path):
+    service = make_service(tmp_path)
+    service.handle_text(1, "ernest", "Ernest", 100, "/register")
+    service.handle_text(2, "cyril", "cyril", 100, "/register")
+
+    response = service.handle_text(3, "third", "Third", 100, "/register")
+
+    assert "already has 2 players" in response
+    assert not service.db.is_registered(3, chat_id=100)
+
+
 def test_handle_goals_requires_registration(tmp_path):
     service = make_service(tmp_path)
     response = service.handle_text(1, "ernest", "Ernest", 100, """/goals

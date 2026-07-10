@@ -29,10 +29,22 @@ def test_intro_text_explains_how_to_start(tmp_path):
     service = make_service(tmp_path)
     intro = service.intro_text()
     assert "Welcome" in intro
+    assert "2-person" in intro
+    assert "group" in intro
     assert "/register" in intro
     assert "/goals" in intro
     assert "/done" in intro
     assert "2/3" in intro
+
+
+def test_private_chat_intro_explains_bot_requires_two_person_group(tmp_path):
+    service = make_service(tmp_path)
+    intro = service.private_chat_text()
+
+    assert "can't run in a private chat" in intro.lower()
+    assert "group" in intro.lower()
+    assert "2 people" in intro
+    assert "/register" in intro
 
 
 def test_command_menu_payload_lists_core_commands():

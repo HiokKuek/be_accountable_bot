@@ -100,3 +100,12 @@ def test_claim_notification_once_is_group_and_day_scoped(tmp_path):
     assert db.claim_notification_once("goals-keyed", day, chat_id=100) is False
     assert db.claim_notification_once("goals-keyed", day, chat_id=200) is True
     assert db.claim_notification_once("goals-keyed", date(2026, 7, 10), chat_id=100) is True
+
+
+def test_active_chat_ids_excludes_private_chats_from_scheduled_jobs(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "ernest", "Ernest", chat_id=-100)
+    db.register_user(2, "maverick", "Maverick", chat_id=647161028)
+
+    assert db.active_chat_ids() == [-100]

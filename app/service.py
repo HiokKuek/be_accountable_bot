@@ -10,6 +10,7 @@ from app.parsing import parse_done_count, parse_goals
 from app.qotd import QotdApiClient, QotdClient, QotdUnavailable
 
 SGT = ZoneInfo("Asia/Singapore")
+MAX_PLAYERS_PER_GROUP = 2
 
 
 def h(value: object) -> str:
@@ -31,11 +32,31 @@ class AccountabilityService:
             return now.date() - timedelta(days=1)
         return now.date()
 
-    def handle_text(self, user_id: int, username: str | None, display_name: str, chat_id: int, text: str) -> str | None:
+    def handle_text(
+        self,
+        user_id: int,
+        username: str | None,
+        display_name: str,
+        chat_id: int,
+        text: str,
+        *,
+        chat_type: str | None = None,
+    ) -> str | None:
         text = text.strip()
+        if chat_type == "private":
+            return self.private_chat_text()
+
         self.db.register_chat(chat_id)
 
         if text.lower().startswith("/register"):
+            users = self.db.active_users(chat_id=chat_id)
+            already_registered = any(int(u["telegram_user_id"]) == int(user_id) for u in users)
+            if not already_registered and len(users) >= MAX_PLAYERS_PER_GROUP:
+                return (
+                    "This group already has 2 players registered ✅\n\n"
+                    "This bot is designed for a 2-person accountability group. "
+                    "If you need to swap a player, ask a group admin to remove the old registration first."
+                )
             self.db.register_user(user_id, username, display_name, chat_id=chat_id)
             users = self.db.active_users(chat_id=chat_id)
             roster = "\n".join(f"{idx}. {h(u['display_name'])}" for idx, u in enumerate(users, start=1))
@@ -84,13 +105,22 @@ class AccountabilityService:
     def intro_text(self) -> str:
         return (
             "<b>Welcome to the Accountability Bot 👋</b>\n\n"
-            "I help this group run a simple daily 3-goal challenge.\n\n"
+            "I help a 2-person Telegram group run a simple daily 3-goal accountability challenge.\n\n"
             "<b>How to start</b>\n"
             "1. Each person sends <code>/register</code> once.\n"
             "2. Every morning, submit exactly 3 goals with <code>/goals</code>.\n"
             "3. At night, report completion with <code>/done 0</code>, <code>/done 1</code>, <code>/done 2</code>, or <code>/done 3</code>.\n\n"
             "Passing means completing 2/3 or 3/3 goals. Missing goals or missing completion counts as a failed day.\n\n"
             "Tap the bot command menu, or send <code>/help</code> anytime."
+        )
+
+    def private_chat_text(self) -> str:
+        return (
+            "<b>Hey 👋 I can't run in a private chat.</b>\n\n"
+            "I'm designed for a Telegram group with exactly 2 people, so both players can see the daily goals, "
+            "reminders, results, and month-end settlement.\n\n"
+            "Please add <b>@be_accountable_bot</b> to a group with 2 people, then each person can send "
+            "<code>/register</code> there to start."
         )
 
     def help_text(self) -> str:

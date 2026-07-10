@@ -431,6 +431,7 @@ class Database:
                 SELECT DISTINCT c.chat_id
                 FROM chats c
                 JOIN participants p ON p.chat_id=c.chat_id AND p.active=1
+                WHERE c.chat_id < 0
                 ORDER BY c.created_at
                 """
             ).fetchall()
