@@ -37,20 +37,21 @@ def test_private_chat_commands_get_group_only_intro_and_do_not_register(tmp_path
 
     assert "can't run in a private chat" in response.lower()
     assert "group" in response.lower()
-    assert "2 people" in response
+    assert "group" in response.lower()
     assert not service.db.is_registered(1, chat_id=100)
     assert service.db.active_users(chat_id=100) == []
 
 
-def test_group_registration_is_limited_to_two_players(tmp_path):
+def test_group_registration_allows_more_than_two_players(tmp_path):
     service = make_service(tmp_path)
     service.handle_text(1, "ernest", "Ernest", 100, "/register")
     service.handle_text(2, "cyril", "cyril", 100, "/register")
 
     response = service.handle_text(3, "third", "Third", 100, "/register")
 
-    assert "already has 2 players" in response
-    assert not service.db.is_registered(3, chat_id=100)
+    assert "Registered Third" in response
+    assert "Participants: 3" in response
+    assert service.db.is_registered(3, chat_id=100)
 
 
 def test_handle_goals_requires_registration(tmp_path):
@@ -85,15 +86,16 @@ def test_today_summary_shows_logged_goals_as_pending_before_completion_cutoff(tm
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 22, 0, tzinfo=SGT))
 
-    assert "<b>cyril</b>" in response
+    assert "<b>👤 cyril</b>" in response
     assert "1. gym" in response
     assert "2. study" in response
     assert "3. sleep early" in response
-    assert "<b>Ernest</b>" in response
+    assert "<b>👤 Ernest</b>" in response
     assert "1. work" in response
     assert "2. run" in response
     assert "3. read" in response
-    assert "Status: ⏳ pending — not reported" in response
+    assert "Status: <b>⏳ Pending</b>" in response
+    assert "Progress: <code>not reported</code>" in response
     assert "<b>pending</b>" not in response
     assert "❌ fail" not in response
 
@@ -108,10 +110,9 @@ def test_today_summary_separates_players_with_blank_line_and_bolds_names(tmp_pat
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 22, 0, tzinfo=SGT))
 
-    assert "<b>cyril</b>\nStatus:" in response
-    assert "\n\n<b>Ernest</b>\nStatus:" in response
-    assert "\nGoals\n" in response
-    assert "<b>Goals</b>" not in response
+    assert "<b>👤 cyril</b>\nStatus:" in response
+    assert "\n\n<b>👤 Ernest</b>\nStatus:" in response
+    assert "\n<b>Goals</b>\n" in response
 
 
 def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
@@ -121,7 +122,8 @@ def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 9, 10, 1, tzinfo=SGT))
 
-    assert "Status: ❌ fail — no goals logged" in response
+    assert "Status: <b>❌ Fail</b>" in response
+    assert "Progress: <code>no goals logged</code>" in response
 
 
 def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
@@ -132,8 +134,9 @@ def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_pa
 
     response = service.today_summary(day, chat_id=100, now=datetime(2026, 7, 10, 5, 1, tzinfo=SGT))
 
-    assert "<b>cyril</b>" in response
-    assert "Status: ❌ fail — not reported" in response
+    assert "<b>👤 cyril</b>" in response
+    assert "Status: <b>❌ Fail</b>" in response
+    assert "Progress: <code>not reported</code>" in response
 
 
 def test_reminders_return_none_when_everyone_has_done_the_required_action(tmp_path):
@@ -179,15 +182,15 @@ def test_goal_confirmation_summary_thanks_users_shows_goals_and_api_qotd(tmp_pat
 
     response = service.goal_confirmation_summary(day, chat_id=100)
 
-    assert "Great thanks for keying your goals" in response
-    assert "<b>cyril</b>" in response
+    assert "All goals are keyed" in response
+    assert "<b>👤 cyril</b>" in response
     assert "1. settle sep coursereg" in response
-    assert "<b>Ernest</b>" in response
+    assert "<b>👤 Ernest</b>" in response
     assert "1. x leetcode" in response
-    assert "<b>QOTD</b>" in response
-    assert "<i>Consistency beats intensity</i>" in response
+    assert "<b>💬 QOTD</b>" in response
+    assert "<blockquote><i>Consistency beats intensity</i></blockquote>" in response
     assert "— Internet Quote API" in response
-    assert "\n\n<b>Ernest</b>" in response
+    assert "\n\n<b>👤 Ernest</b>" in response
     assert qotd_client.calls == 1
 
 
@@ -203,16 +206,69 @@ def test_qotd_escapes_api_response_html(tmp_path):
     assert "A&amp;B" in response
 
 
-def test_score_uses_net_settlement(tmp_path):
+def test_score_uses_multi_user_leaderboard_not_net_settlement(tmp_path):
     service = make_service(tmp_path)
-    service.handle_text(1, "ernest", "Ernest", 100, "/register")
-    service.handle_text(2, "friend", "Friend", 100, "/register")
-    service.db.upsert_goals(1, date(2026, 7, 1), ["a", "b", "c"], late=False, chat_id=100)
-    service.db.upsert_completion(1, date(2026, 7, 1), 1, chat_id=100)
-    service.db.upsert_goals(2, date(2026, 7, 1), ["a", "b", "c"], late=False, chat_id=100)
-    service.db.upsert_completion(2, date(2026, 7, 1), 3, chat_id=100)
-    response = service.handle_text(1, "ernest", "Ernest", 100, "/score")
-    assert "Ernest pays Friend $5" in response
+    day = date(2026, 7, 1)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    service.db.register_user(2, "friend", "Friend", chat_id=100)
+    service.db.register_user(3, "third", "Third", chat_id=100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_completion(1, day, 3, chat_id=100)
+    service.db.upsert_goals(2, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_completion(2, day, 1, chat_id=100)
+    service.db.upsert_goals(3, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_completion(3, day, 0, chat_id=100)
+
+    response = service.month_score(chat_id=100, year=2026, month=7)
+
+    assert "Leaderboard" in response
+    assert "1. Ernest — <b>0</b> failed days — <b>$0</b>" in response
+    assert "2. Friend — <b>1</b> failed day — <b>$5</b>" in response
+    assert "3. Third — <b>1</b> failed day — <b>$5</b>" in response
+    assert "pays" not in response
+    assert "Group total: <b>$10</b>" in response
+
+
+def test_remove_deactivates_participant_only_for_current_group(tmp_path):
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    service.db.register_user(2, "friend", "Friend", chat_id=100)
+    service.db.register_user(2, "friend", "Friend", chat_id=200)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/remove @friend")
+
+    assert "Removed Friend" in response
+    assert not service.db.is_registered(2, chat_id=100)
+    assert service.db.is_registered(2, chat_id=200)
+
+
+def test_deadline_summary_posts_submitted_goals_and_tags_missing_users(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 1)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    service.db.register_user(2, "friend", "Friend", chat_id=100)
+    service.db.register_user(3, "third", "Third", chat_id=100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=100)
+
+    response = service.goal_deadline_summary(day, chat_id=100)
+
+    assert "Goal deadline reached" in response
+    assert "Submitted: <b>2/3</b>" in response
+    assert "@third" in response
+    assert "Ernest" in response
+    assert "Friend" in response
+
+
+def test_deadline_summary_skips_when_all_users_already_submitted(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 1)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    service.db.register_user(2, "friend", "Friend", chat_id=100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+    service.db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=100)
+
+    assert service.goal_deadline_summary(day, chat_id=100) is None
 
 
 def test_registration_roster_is_scoped_to_group(tmp_path):
@@ -255,5 +311,7 @@ def test_today_and_score_are_scoped_to_group(tmp_path):
     assert "Ernest" in today
     assert "Friend" in today
     assert "Outsider" not in today
-    assert "Ernest pays Friend $5" in score
+    assert "Ernest" in score
+    assert "Friend" in score
+    assert "pays" not in score
     assert "Outsider" not in score

@@ -28,8 +28,8 @@ def test_user_facing_text_does_not_show_markdown_heading_markers(tmp_path):
 def test_intro_text_explains_how_to_start(tmp_path):
     service = make_service(tmp_path)
     intro = service.intro_text()
-    assert "Welcome" in intro
-    assert "2-person" in intro
+    assert "Accountability Bot" in intro
+    assert "group" in intro.lower()
     assert "group" in intro
     assert "/register" in intro
     assert "/goals" in intro
@@ -37,13 +37,13 @@ def test_intro_text_explains_how_to_start(tmp_path):
     assert "2/3" in intro
 
 
-def test_private_chat_intro_explains_bot_requires_two_person_group(tmp_path):
+def test_private_chat_intro_explains_bot_requires_group(tmp_path):
     service = make_service(tmp_path)
     intro = service.private_chat_text()
 
     assert "can't run in a private chat" in intro.lower()
     assert "group" in intro.lower()
-    assert "2 people" in intro
+    assert "group" in intro.lower()
     assert "/register" in intro
 
 
@@ -55,6 +55,7 @@ def test_command_menu_payload_lists_core_commands():
         "done",
         "today",
         "score",
+        "remove",
         "rules",
         "help",
     }

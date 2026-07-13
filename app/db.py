@@ -374,18 +374,20 @@ class Database:
         with self.connect() as conn:
             row = conn.execute(
                 """
-                SELECT COUNT(*) AS missing_count
+                SELECT
+                    COUNT(*) AS active_count,
+                    SUM(CASE WHEN c.goals_json IS NULL THEN 1 ELSE 0 END) AS missing_count
                 FROM participants p
                 JOIN users u ON u.telegram_user_id=p.telegram_user_id
                 LEFT JOIN checkins c
                   ON c.telegram_user_id=p.telegram_user_id
                  AND c.chat_id=p.chat_id
                  AND c.checkin_date=?
-                WHERE p.chat_id=? AND p.active=1 AND u.active=1 AND c.goals_json IS NULL
+                WHERE p.chat_id=? AND p.active=1 AND u.active=1
                 """,
                 (checkin_date.isoformat(), chat_id),
             ).fetchone()
-        return int(row["missing_count"]) == 0
+        return int(row["active_count"]) > 0 and int(row["missing_count"] or 0) == 0
 
     def claim_notification_once(self, kind: str, notification_date: date, *, chat_id: int) -> bool:
         now = datetime.now(SGT).isoformat(timespec="seconds")
@@ -438,7 +440,7 @@ class Database:
         return [int(row["chat_id"]) for row in rows]
 
     def delete_user_by_name(self, name: str) -> int:
-        normalized = name.strip().casefold()
+        normalized = name.strip().lstrip("@").casefold()
         if not normalized:
             return 0
         with self.connect() as conn:
@@ -458,6 +460,33 @@ class Database:
             conn.execute(f"DELETE FROM participants WHERE telegram_user_id IN ({placeholders})", user_ids)
             conn.execute(f"DELETE FROM users WHERE telegram_user_id IN ({placeholders})", user_ids)
         return len(user_ids)
+
+    def deactivate_participant_by_name(self, chat_id: int, name: str) -> dict | None:
+        normalized = name.strip().lstrip("@").casefold()
+        if not normalized:
+            return None
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT u.telegram_user_id, u.display_name
+                FROM participants p
+                JOIN users u ON u.telegram_user_id=p.telegram_user_id
+                WHERE p.chat_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND (lower(COALESCE(u.username, ''))=? OR lower(u.display_name)=?)
+                ORDER BY p.registered_at
+                LIMIT 1
+                """,
+                (chat_id, normalized, normalized),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                "UPDATE participants SET active=0 WHERE chat_id=? AND telegram_user_id=?",
+                (chat_id, row["telegram_user_id"]),
+            )
+        return {"telegram_user_id": int(row["telegram_user_id"]), "display_name": row["display_name"]}
 
     def _row_to_checkin(self, row: sqlite3.Row) -> dict:
         data = dict(row)

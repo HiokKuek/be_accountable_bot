@@ -31,15 +31,47 @@ def test_completion_reminder_jobs_skip_send_when_everyone_reported(tmp_path):
     service = make_service(tmp_path)
     telegram = FakeTelegram()
     day = service.today()
-    service.db.register_user(1, "cyril", "cyril", chat_id=100)
-    service.db.register_user(2, "ernest", "Ernest", chat_id=100)
-    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
-    service.db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=100)
-    service.db.upsert_completion(1, day, 2, chat_id=100)
-    service.db.upsert_completion(2, day, 3, chat_id=100)
+    service.db.register_user(1, "cyril", "cyril", chat_id=-100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=-100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=-100)
+    service.db.upsert_goals(2, day, ["d", "e", "f"], late=False, chat_id=-100)
+    service.db.upsert_completion(1, day, 2, chat_id=-100)
+    service.db.upsert_completion(2, day, 3, chat_id=-100)
     scheduler = build_scheduler(service, telegram)
 
     scheduler.get_job("completion-reminder-20").func()
     scheduler.get_job("completion-reminder-22").func()
 
     assert telegram.sent == []
+
+
+def test_morning_goal_reminder_tags_only_missing_users(tmp_path):
+    service = make_service(tmp_path)
+    telegram = FakeTelegram()
+    day = service.today()
+    service.db.register_user(1, "cyril", "cyril", chat_id=-100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=-100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=-100)
+    scheduler = build_scheduler(service, telegram)
+
+    scheduler.get_job("morning-goal-reminder").func()
+
+    assert len(telegram.sent) == 1
+    assert "@ernest" in telegram.sent[0][1]
+    assert "@cyril" not in telegram.sent[0][1]
+
+
+def test_goal_deadline_summary_sends_when_some_users_are_missing(tmp_path):
+    service = make_service(tmp_path)
+    telegram = FakeTelegram()
+    day = service.today()
+    service.db.register_user(1, "cyril", "cyril", chat_id=-100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=-100)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=-100)
+    scheduler = build_scheduler(service, telegram)
+
+    scheduler.get_job("goal-deadline-summary").func()
+
+    assert len(telegram.sent) == 1
+    assert "Goal deadline reached" in telegram.sent[0][1]
+    assert "@ernest" in telegram.sent[0][1]

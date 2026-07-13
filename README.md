@@ -1,6 +1,6 @@
 # Accountability Bot
 
-A friendly Telegram bot that helps a 2-person group stay accountable with daily goals, reminders, status updates, and month-end settlement.
+A friendly Telegram bot that helps a group stay accountable with daily goals, targeted reminders, status updates, and a monthly leaderboard.
 
 Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
 
@@ -8,20 +8,20 @@ Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
 
 `@be_accountable_bot` runs a simple daily accountability challenge:
 
-1. Everyone submits **exactly 3 goals** in the morning.
-2. Everyone reports how many goals they completed at night.
+1. Participants submit **exactly 3 goals** in the morning.
+2. Participants report how many goals they completed at night.
 3. The bot tracks who passed or failed each day.
-4. At month end, the person with more failed days pays the other person based on the settlement rule.
+4. `/score` shows the current month leaderboard ranked by fewest failed days.
 
-It is designed for a Telegram group with **2 people**, so both players can see the goals, reminders, and status updates together.
+It is designed for a Telegram group. Any group member who wants to participate can register; people who do not register are not tracked or tagged.
 
-It does **not** run in private messages. If you PM the bot, it will explain that it needs to be added to a 2-person group first.
+It does **not** run in private messages. If you PM the bot, it will explain that it needs to be added to a group first.
 
 ## Quick start
 
 ### 1. Add the bot to your Telegram group
 
-Create or choose a Telegram group with exactly **2 people**, then add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to that group.
+Create or choose a Telegram group, then add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to that group.
 
 Once the bot joins, it will introduce itself and explain the basic flow.
 
@@ -36,11 +36,13 @@ Each participant should send this once in the group:
 Example response:
 
 ```text
-Registered Ernest ✅
+✅ Registered Ernest
+Participants: 3
 
-Current players
+Current participants
 1. Ernest
 2. Cyril
+3. Alice
 ```
 
 ### 3. Submit your 3 daily goals
@@ -92,12 +94,13 @@ All times are in **Singapore time**.
 
 | Time | What happens |
 |---|---|
-| 8:00 AM | Morning reminder to submit goals |
-| 9:30 AM | Reminder tagging only people who have not submitted goals |
-| 10:00 AM | Goal deadline |
-| 8:00 PM | Completion reminder |
-| 10:00 PM | Final completion reminder |
-| 5:00 AM next day | Completion deadline |
+| 8:00 AM | Morning reminder tagging only participants who have not submitted goals yet |
+| 9:30 AM | Final goal reminder tagging only participants who have not submitted goals |
+| 10:00 AM | Goal deadline summary posts if anyone is still missing |
+| Before 10:00 AM | If all registered participants submit early, the goals summary posts immediately |
+| 8:00 PM | Completion reminder tagging only participants who have not reported `/done` |
+| 10:00 PM | Final completion reminder tagging only participants who have not reported `/done` |
+| 5:00 AM next day | Completion deadline and daily close |
 
 If you do not submit goals by **10:00 AM**, the day counts as failed.
 
@@ -114,8 +117,9 @@ If you do not report completion by **5:00 AM the next day**, the day counts as f
 | `/done 2` | Report that you completed 2 goals | `/done 2` |
 | `/done 3` | Report that you completed all 3 goals | `/done 3` |
 | `/today` | Show today's goals and status | `/today` |
-| `/score` | Show current month standings and settlement | `/score` |
+| `/score` | Show current month leaderboard | `/score` |
 | `/summary` | Same as `/score` | `/summary` |
+| `/remove` | Remove an inactive participant from this group | `/remove @username` |
 | `/rules` | Show the challenge rules | `/rules` |
 | `/help` | Show command help and examples | `/help` |
 
@@ -128,13 +132,6 @@ Good goal submissions have **exactly 3 goals**, one per line.
 - settle course registration
 - chest and back workout
 - read 20 pages
-```
-
-```text
-/goals
-- 3x leetcode
-- gym
-- read
 ```
 
 ```text
@@ -157,17 +154,19 @@ Use:
 Example output:
 
 ```text
-Daily Status — 2026-07-09
+Daily Status — 09 Jul 2026
 
 cyril
-Status: ⏳ pending — not reported
+Status: ⏳ Pending
+Progress: not reported
 Goals
 1. settle course registration
 2. chest and back
 3. read
 
 Ernest
-Status: ✅ pass — 2/3
+Status: ✅ Pass
+Progress: 2/3
 Goals
 1. 3x leetcode
 2. gym
@@ -178,11 +177,11 @@ Status meanings:
 
 | Status | Meaning |
 |---|---|
-| ⏳ pending | The day is still in progress |
-| ✅ pass | Completed at least 2 out of 3 goals |
-| ❌ fail | Missed goals, missed completion report, or completed fewer than 2 goals |
+| ⏳ Pending | The day is still in progress |
+| ✅ Pass | Completed at least 2 out of 3 goals |
+| ❌ Fail | Missed goals, missed completion report, or completed fewer than 2 goals |
 
-## Month-end settlement
+## Monthly leaderboard
 
 Use:
 
@@ -190,33 +189,49 @@ Use:
 /score
 ```
 
-The bot counts failed days for the current month.
+The bot counts failed days for the current month and ranks participants by fewest failed days.
 
-Settlement rule:
+Example:
 
 ```text
-Person with more failed days pays the other person $5 × difference.
+🏆 Leaderboard — July 2026
+━━━━━━━━━━━━
+1. Ernest — 0 failed days — $0
+2. Friend — 1 failed day — $5
+3. Third — 3 failed days — $15
+
+Group total: $20
 ```
 
-Examples:
+There is no two-person net settlement. The leaderboard simply shows each participant's failed-day count and penalty total using the configured amount, currently `$5` per failed day.
 
-| Ernest failed days | Cyril failed days | Settlement |
-|---:|---:|---|
-| 3 | 1 | Ernest pays Cyril $10 |
-| 2 | 5 | Cyril pays Ernest $15 |
-| 4 | 4 | Tie — nobody pays |
+## Removing inactive participants
 
-This is a **net settlement**, so if both people fail equally often, nobody pays.
+Use `/remove` to stop tracking an inactive participant in the current group:
+
+```text
+/remove @username
+```
+
+or:
+
+```text
+/remove Display Name
+```
+
+Removal is scoped to the current Telegram group. It does not delete that user's membership in other groups.
 
 ## Quote of the day
 
-When everyone has submitted their goals, the bot sends a group summary with today's goals and a **Quote of the Day**.
+When everyone has submitted their goals before the 10:00 AM deadline, the bot sends a group goals summary with a **Quote of the Day**.
+
+At 10:00 AM, if some participants are still missing, the bot posts the submitted goals so far and tags only the missing participants.
 
 The quote comes from an external quote API. If the quote service is temporarily unavailable, the bot will still send the goals summary.
 
 ## Friendly tips
 
-- Submit your goals early so you do not get tagged by the 9:30 AM reminder.
+- Submit your goals early so you do not get tagged by reminders.
 - Keep goals concrete and easy to judge at night.
 - Use `/done 2` or `/done 3` as soon as you know you have passed the day.
 - Use `/today` anytime to check what is still pending.
@@ -261,20 +276,21 @@ The bot tracks each Telegram group separately. If you use it in multiple groups,
 
 ### PMing the bot directly
 
-The bot cannot run the challenge in a private chat because both players need to see the same goals, reminders, status, and settlement.
+The bot cannot run the challenge in a private chat because participants need to see the same goals, reminders, status, and leaderboard.
 
-If you message the bot directly, it will give you a friendly intro and ask you to add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to a group with **2 people**.
+If you message the bot directly, it will give you a friendly intro and ask you to add **[@be_accountable_bot](https://t.me/be_accountable_bot)** to a group.
 
 ## Rules summary
 
-- Use the bot in a Telegram group with **2 people**.
+- Use the bot in a Telegram group.
 - Register once with `/register`.
 - Submit exactly 3 goals by **10:00 AM Singapore time**.
+- If everyone submits before the deadline, the goals summary posts immediately.
+- If not everyone submits before the deadline, the 10:00 AM summary posts with submitted goals and tags only missing participants.
 - Report completion with `/done 0`, `/done 1`, `/done 2`, or `/done 3`.
 - Complete **2/3 or 3/3** goals to pass.
 - Missing goals or missing completion report counts as a fail.
-- Month-end settlement is `$5 × failed-day difference`.
-- If failed days are tied, nobody pays.
+- `/score` is a leaderboard ranked by fewest failed days.
 
 ## Need help?
 

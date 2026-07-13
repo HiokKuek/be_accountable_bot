@@ -17,23 +17,15 @@ def assess_day_result(*, goals_submitted: bool, completed_count: int | None) -> 
     return "pass" if completed_count >= 2 else "fail"
 
 
-def net_settlement(failed_days_by_user: dict[str, int], penalty_amount: int) -> dict[str, object]:
-    """Compute net monthly settlement for two users.
-
-    The user with more failed days pays the other penalty_amount × difference.
-    If tied, nobody pays.
-    """
-    if len(failed_days_by_user) < 2:
-        return {"payer": None, "receiver": None, "amount": 0, "difference": 0}
-    ranked = sorted(failed_days_by_user.items(), key=lambda item: item[1], reverse=True)
-    payer, payer_failures = ranked[0]
-    receiver, receiver_failures = ranked[1]
-    difference = payer_failures - receiver_failures
-    if difference <= 0:
-        return {"payer": None, "receiver": None, "amount": 0, "difference": 0}
-    return {
-        "payer": payer,
-        "receiver": receiver,
-        "amount": difference * penalty_amount,
-        "difference": difference,
-    }
+def monthly_leaderboard(failed_days_by_user: dict[str, int], penalty_amount: int) -> list[dict[str, object]]:
+    """Rank participants by fewest failed days and compute each user's penalty total."""
+    ranked = sorted(failed_days_by_user.items(), key=lambda item: (item[1], item[0].casefold()))
+    return [
+        {
+            "rank": rank,
+            "name": name,
+            "failed_days": failed_days,
+            "penalty": failed_days * penalty_amount,
+        }
+        for rank, (name, failed_days) in enumerate(ranked, start=1)
+    ]

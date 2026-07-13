@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.domain import assess_day_result, net_settlement
+from app.domain import assess_day_result, monthly_leaderboard
 
 
 def test_done_two_or_three_passes():
@@ -21,11 +21,11 @@ def test_missing_completion_fails():
     assert assess_day_result(goals_submitted=True, completed_count=None) == "fail"
 
 
-def test_net_settlement_tie_means_no_payment():
-    result = net_settlement({"ernest": 2, "friend": 2}, penalty_amount=5)
-    assert result == {"payer": None, "receiver": None, "amount": 0, "difference": 0}
+def test_monthly_leaderboard_ranks_fewer_failures_first_with_penalties():
+    result = monthly_leaderboard({"ernest": 1, "friend": 3, "third": 0}, penalty_amount=5)
 
-
-def test_net_settlement_worse_performer_pays_difference():
-    result = net_settlement({"ernest": 5, "friend": 2}, penalty_amount=5)
-    assert result == {"payer": "ernest", "receiver": "friend", "amount": 15, "difference": 3}
+    assert result == [
+        {"rank": 1, "name": "third", "failed_days": 0, "penalty": 0},
+        {"rank": 2, "name": "ernest", "failed_days": 1, "penalty": 5},
+        {"rank": 3, "name": "friend", "failed_days": 3, "penalty": 15},
+    ]

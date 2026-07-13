@@ -109,3 +109,23 @@ def test_active_chat_ids_excludes_private_chats_from_scheduled_jobs(tmp_path):
     db.register_user(2, "maverick", "Maverick", chat_id=647161028)
 
     assert db.active_chat_ids() == [-100]
+
+
+def test_all_active_users_have_goals_requires_at_least_one_active_user(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+
+    assert db.all_active_users_have_goals(date(2026, 7, 9), chat_id=-100) is False
+
+
+def test_deactivate_participant_by_name_is_scoped_to_chat(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "ernest", "Ernest", chat_id=100)
+    db.register_user(1, "ernest", "Ernest", chat_id=200)
+
+    removed = db.deactivate_participant_by_name(100, "@ernest")
+
+    assert removed == {"telegram_user_id": 1, "display_name": "Ernest"}
+    assert not db.is_registered(1, chat_id=100)
+    assert db.is_registered(1, chat_id=200)

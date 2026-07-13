@@ -22,7 +22,7 @@ def build_scheduler(service: AccountabilityService, telegram: TelegramClient) ->
                 telegram.send_message_sync(chat_id, text)
 
     scheduler.add_job(
-        lambda: send_to_all_active_chats(lambda chat_id: service.morning_reminder()),
+        lambda: send_to_all_active_chats(lambda chat_id: service.morning_reminder(chat_id=chat_id)),
         CronTrigger(hour=8, minute=0, timezone=SGT),
         id="morning-goal-reminder",
         replace_existing=True,
@@ -31,6 +31,14 @@ def build_scheduler(service: AccountabilityService, telegram: TelegramClient) ->
         lambda: send_to_all_active_chats(lambda chat_id: service.missing_goals_reminder(chat_id=chat_id)),
         CronTrigger(hour=9, minute=30, timezone=SGT),
         id="missing-goals-reminder",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: send_to_all_active_chats(
+            lambda chat_id: service.goal_deadline_summary(datetime.now(SGT).date(), chat_id=chat_id)
+        ),
+        CronTrigger(hour=10, minute=0, timezone=SGT),
+        id="goal-deadline-summary",
         replace_existing=True,
     )
     for hour in (20, 22):
