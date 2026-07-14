@@ -104,6 +104,8 @@ All times are in **Singapore time**.
 
 If you do not submit goals by **10:00 AM**, the day counts as failed.
 
+New participants who register after **10:00 AM** start from the next day. They are not tagged as missing or failed for that same date; if they choose to submit same-day goals, those goals are accepted without the late penalty.
+
 If you do not report completion by **5:00 AM the next day**, the day counts as failed.
 
 ## Commands
@@ -287,6 +289,7 @@ If you message the bot directly, it will give you a friendly intro and ask you t
 - Submit exactly 3 goals by **10:00 AM Singapore time**.
 - If everyone submits before the deadline, the goals summary posts immediately.
 - If not everyone submits before the deadline, the 10:00 AM summary posts with submitted goals and tags only missing participants.
+- Participants who register after 10:00 AM start from tomorrow and are not failed for that same day.
 - Report completion with `/done 0`, `/done 1`, `/done 2`, or `/done 3`.
 - Complete **2/3 or 3/3** goals to pass.
 - Missing goals or missing completion report counts as a fail.

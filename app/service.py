@@ -112,7 +112,9 @@ class AccountabilityService:
         goals = parse_goals(text)
         if goals is not None:
             checkin_date = self.today()
-            late = datetime.now(SGT).time().hour >= 10
+            late = datetime.now(SGT).time().hour >= 10 and not self.db.has_registration_grace(
+                user_id, checkin_date, chat_id=chat_id
+            )
             self.db.upsert_goals(user_id, checkin_date, goals, late=late, chat_id=chat_id)
             late_note = "\n\n⚠️ <b>Late:</b> marked late because this was after 10:00am." if late else ""
             return (
@@ -208,7 +210,8 @@ class AccountabilityService:
             "2. Complete at least <b>2/3</b> goals to pass.\n"
             "3. Report with <code>/done 0</code> to <code>/done 3</code> by <b>5:00am next day</b>.\n"
             "4. Missing goals or missing completion report = failed day.\n"
-            f"5. <code>/score</code> ranks the group by fewest failed days. Each failed day counts as <b>${self.penalty_amount}</b> in penalties."
+            "5. New participants who register after <b>10:00am SGT</b> start from tomorrow; same-day goals are optional and not marked late.\n"
+            f"6. <code>/score</code> ranks the group by fewest failed days. Each failed day counts as <b>${self.penalty_amount}</b> in penalties."
         )
 
     def today_summary(self, checkin_date: date, *, chat_id: int, now: datetime | None = None) -> str:

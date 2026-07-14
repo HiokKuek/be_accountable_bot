@@ -126,6 +126,33 @@ def test_today_summary_marks_missing_goals_failed_after_10am(tmp_path):
     assert "Progress: <code>no goals logged</code>" in response
 
 
+def test_after_deadline_registration_grace_accepts_same_day_goals_without_late_fail(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 9, 10, 30, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "late", "Late Joiner", chat_id=100)
+    with service.db.connect() as conn:
+        conn.execute(
+            "UPDATE participants SET registered_at=? WHERE chat_id=? AND telegram_user_id=?",
+            ("2026-07-09T10:30:00+08:00", 100, 1),
+        )
+
+    response = service.handle_text(1, "late", "Late Joiner", 100, """/goals
+- a
+- b
+- c""")
+    row = service.db.get_checkin(1, day, chat_id=100)
+
+    assert "Late:" not in response
+    assert row["goals_status"] == "submitted"
+    assert "Status: <b>⏳ Pending</b>" in service.today_summary(day, chat_id=100, now=FrozenDateTime.now(SGT))
+
+
 def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
     service = make_service(tmp_path)
     day = date(2026, 7, 9)

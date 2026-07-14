@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -48,17 +48,46 @@ class Database:
                     PRIMARY KEY(chat_id, telegram_user_id)
                 );
 
-                CREATE TABLE IF NOT EXISTS notifications (
-                    chat_id INTEGER NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE,
-                    notification_date TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    sent_at TEXT NOT NULL,
-                    PRIMARY KEY(chat_id, notification_date, kind)
-                );
                 """
             )
+            self._ensure_notification_events(conn)
             self._ensure_group_scoped_checkins(conn)
             self._backfill_participants(conn)
+
+    def _ensure_notification_events(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notification_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE,
+                notification_date TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                status TEXT NOT NULL,
+                message_id INTEGER,
+                error TEXT,
+                sent_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_notification_events_day_chat_kind
+            ON notification_events(notification_date, chat_id, kind)
+            """
+        )
+        conn.execute("DROP INDEX IF EXISTS idx_notification_events_unique_sent")
+        if not self._table_exists(conn, "notifications"):
+            return
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO notification_events(
+                chat_id, notification_date, kind, status, message_id, error, sent_at
+            )
+            SELECT chat_id, notification_date, kind, 'sent', NULL, NULL, sent_at
+            FROM notifications
+            """
+        )
+        conn.execute("DROP TABLE notifications")
 
     def _ensure_group_scoped_checkins(self, conn: sqlite3.Connection) -> None:
         if not self._table_exists(conn, "checkins"):
@@ -198,7 +227,12 @@ class Database:
                 """
                 INSERT INTO participants(chat_id, telegram_user_id, active, registered_at)
                 VALUES (?, ?, 1, ?)
-                ON CONFLICT(chat_id, telegram_user_id) DO UPDATE SET active=1
+                ON CONFLICT(chat_id, telegram_user_id) DO UPDATE SET
+                    registered_at=CASE
+                        WHEN participants.active=0 THEN excluded.registered_at
+                        ELSE participants.registered_at
+                    END,
+                    active=1
                 """,
                 (chat_id, telegram_user_id, now),
             )
@@ -285,34 +319,46 @@ class Database:
         return self._row_to_checkin(row) if row else None
 
     def checkins_for_day(self, checkin_date: date, *, chat_id: int) -> list[dict]:
+        deadline, next_day = self._goal_deadline_bounds(checkin_date)
         with self.connect() as conn:
             rows = conn.execute(
                 """
-                SELECT c.*, u.telegram_user_id AS roster_telegram_user_id, u.username, u.display_name
+                SELECT c.*, u.telegram_user_id AS roster_telegram_user_id, u.username, u.display_name, p.registered_at
                 FROM participants p
                 JOIN users u ON u.telegram_user_id=p.telegram_user_id
                 LEFT JOIN checkins c
                   ON c.telegram_user_id=p.telegram_user_id
                  AND c.chat_id=p.chat_id
                  AND c.checkin_date=?
-                WHERE p.chat_id=? AND p.active=1 AND u.active=1
+                WHERE p.chat_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND (NOT (p.registered_at > ? AND p.registered_at < ?) OR c.goals_json IS NOT NULL)
                 ORDER BY p.registered_at
                 """,
-                (checkin_date.isoformat(), chat_id),
+                (checkin_date.isoformat(), chat_id, deadline, next_day),
             ).fetchall()
         return [self._row_to_checkin(row) for row in rows]
 
     def close_day(self, checkin_date: date, *, chat_id: int) -> None:
         now = datetime.now(SGT).isoformat(timespec="seconds")
+        deadline, next_day = self._goal_deadline_bounds(checkin_date)
         with self.connect() as conn:
             users = conn.execute(
                 """
                 SELECT p.telegram_user_id
                 FROM participants p
                 JOIN users u ON u.telegram_user_id=p.telegram_user_id
-                WHERE p.chat_id=? AND p.active=1 AND u.active=1
+                LEFT JOIN checkins c
+                  ON c.telegram_user_id=p.telegram_user_id
+                 AND c.chat_id=p.chat_id
+                 AND c.checkin_date=?
+                WHERE p.chat_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND (NOT (p.registered_at > ? AND p.registered_at < ?) OR c.goals_json IS NOT NULL)
                 """,
-                (chat_id,),
+                (checkin_date.isoformat(), chat_id, deadline, next_day),
             ).fetchall()
             for user in users:
                 uid = user["telegram_user_id"]
@@ -371,6 +417,7 @@ class Database:
         return self._missing_users(checkin_date, "completion", chat_id=chat_id)
 
     def all_active_users_have_goals(self, checkin_date: date, *, chat_id: int) -> bool:
+        deadline, next_day = self._goal_deadline_bounds(checkin_date)
         with self.connect() as conn:
             row = conn.execute(
                 """
@@ -383,9 +430,12 @@ class Database:
                   ON c.telegram_user_id=p.telegram_user_id
                  AND c.chat_id=p.chat_id
                  AND c.checkin_date=?
-                WHERE p.chat_id=? AND p.active=1 AND u.active=1
+                WHERE p.chat_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND NOT (p.registered_at > ? AND p.registered_at < ?)
                 """,
-                (checkin_date.isoformat(), chat_id),
+                (checkin_date.isoformat(), chat_id, deadline, next_day),
             ).fetchone()
         return int(row["active_count"]) > 0 and int(row["missing_count"] or 0) == 0
 
@@ -393,17 +443,74 @@ class Database:
         now = datetime.now(SGT).isoformat(timespec="seconds")
         with self.connect() as conn:
             conn.execute("INSERT OR IGNORE INTO chats(chat_id, title, created_at) VALUES (?, NULL, ?)", (chat_id, now))
+            existing = conn.execute(
+                """
+                SELECT 1 FROM notification_events
+                WHERE chat_id=? AND notification_date=? AND kind=? AND status='sent'
+                LIMIT 1
+                """,
+                (chat_id, notification_date.isoformat(), kind),
+            ).fetchone()
+            if existing:
+                return False
             cursor = conn.execute(
                 """
-                INSERT OR IGNORE INTO notifications(chat_id, notification_date, kind, sent_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO notification_events(
+                    chat_id, notification_date, kind, status, message_id, error, sent_at
+                )
+                VALUES (?, ?, ?, 'sent', NULL, NULL, ?)
                 """,
                 (chat_id, notification_date.isoformat(), kind, now),
             )
             return cursor.rowcount == 1
 
+    def record_notification_event(
+        self,
+        kind: str,
+        notification_date: date,
+        *,
+        chat_id: int,
+        status: str = "sent",
+        message_id: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        now = datetime.now(SGT).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO chats(chat_id, title, created_at) VALUES (?, NULL, ?)", (chat_id, now))
+            conn.execute(
+                """
+                INSERT INTO notification_events(
+                    chat_id, notification_date, kind, status, message_id, error, sent_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (chat_id, notification_date.isoformat(), kind, status, message_id, error, now),
+            )
+
+    def notification_events_for_day(self, notification_date: date, *, chat_id: int | None = None) -> list[dict]:
+        params: list[object] = [notification_date.isoformat()]
+        where = "notification_date=?"
+        if chat_id is not None:
+            where += " AND chat_id=?"
+            params.append(chat_id)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT chat_id, notification_date, kind, status, message_id, error, sent_at
+                FROM notification_events
+                WHERE {where}
+                ORDER BY sent_at, id
+                """,
+                params,
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def _missing_users(self, checkin_date: date, field: str, *, chat_id: int) -> list[dict]:
-        condition = "c.goals_json IS NULL" if field == "goals" else "c.completed_count IS NULL"
+        if field == "goals":
+            condition = "c.goals_json IS NULL AND NOT (p.registered_at > ? AND p.registered_at < ?)"
+        else:
+            condition = "c.completed_count IS NULL AND (NOT (p.registered_at > ? AND p.registered_at < ?) OR c.goals_json IS NOT NULL)"
+        deadline, next_day = self._goal_deadline_bounds(checkin_date)
         with self.connect() as conn:
             rows = conn.execute(
                 f"""
@@ -417,9 +524,33 @@ class Database:
                 WHERE p.chat_id=? AND p.active=1 AND u.active=1 AND ({condition})
                 ORDER BY p.registered_at
                 """,
-                (checkin_date.isoformat(), chat_id),
+                (checkin_date.isoformat(), chat_id, deadline, next_day),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def _goal_deadline_bounds(self, checkin_date: date) -> tuple[str, str]:
+        deadline = datetime.combine(checkin_date, time(10, 0), tzinfo=SGT)
+        next_day = datetime.combine(checkin_date + timedelta(days=1), time(0, 0), tzinfo=SGT)
+        return deadline.isoformat(timespec="seconds"), next_day.isoformat(timespec="seconds")
+
+    def has_registration_grace(self, telegram_user_id: int, checkin_date: date, *, chat_id: int) -> bool:
+        deadline, next_day = self._goal_deadline_bounds(checkin_date)
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM participants p
+                JOIN users u ON u.telegram_user_id=p.telegram_user_id
+                WHERE p.chat_id=?
+                  AND p.telegram_user_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND p.registered_at > ?
+                  AND p.registered_at < ?
+                """,
+                (chat_id, telegram_user_id, deadline, next_day),
+            ).fetchone()
+        return row is not None
 
     def latest_chat_id(self) -> int | None:
         with self.connect() as conn:

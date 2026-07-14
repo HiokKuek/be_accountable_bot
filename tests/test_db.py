@@ -1,4 +1,5 @@
 from datetime import date
+import sqlite3
 
 from app.db import Database
 
@@ -37,6 +38,41 @@ def test_close_day_marks_missing_goals_and_missing_completion_as_fail(tmp_path):
     assert by_user[1]["result"] == "fail"
     assert by_user[2]["result"] == "fail"
     assert by_user[2]["goals_status"] == "missing_goals"
+
+
+def test_close_day_does_not_fail_users_who_register_after_goal_deadline(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "late", "Late Joiner", chat_id=100)
+    day = date(2026, 7, 9)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE participants SET registered_at=? WHERE chat_id=? AND telegram_user_id=?",
+            ("2026-07-09T10:30:00+08:00", 100, 1),
+        )
+
+    assert db.missing_goal_users(day, chat_id=100) == []
+
+    db.close_day(day, chat_id=100)
+
+    assert db.get_checkin(1, day, chat_id=100) is None
+
+
+def test_late_registered_users_count_for_completion_if_they_submit_grace_goals(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "late", "Late Joiner", chat_id=100)
+    day = date(2026, 7, 9)
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE participants SET registered_at=? WHERE chat_id=? AND telegram_user_id=?",
+            ("2026-07-09T10:30:00+08:00", 100, 1),
+        )
+    db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=100)
+
+    missing_completion = db.missing_completion_users(day, chat_id=100)
+
+    assert [user["telegram_user_id"] for user in missing_completion] == [1]
 
 
 def test_same_telegram_user_has_separate_checkins_per_group(tmp_path):
@@ -100,6 +136,54 @@ def test_claim_notification_once_is_group_and_day_scoped(tmp_path):
     assert db.claim_notification_once("goals-keyed", day, chat_id=100) is False
     assert db.claim_notification_once("goals-keyed", day, chat_id=200) is True
     assert db.claim_notification_once("goals-keyed", date(2026, 7, 10), chat_id=100) is True
+
+    events = db.notification_events_for_day(day, chat_id=100)
+    assert [event["kind"] for event in events] == ["goals-keyed"]
+    assert events[0]["status"] == "sent"
+
+
+def test_init_merges_legacy_notifications_into_notification_events_and_drops_old_table(tmp_path):
+    db_path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE chats (
+                chat_id INTEGER PRIMARY KEY,
+                title TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE notifications (
+                chat_id INTEGER NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE,
+                notification_date TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                sent_at TEXT NOT NULL,
+                PRIMARY KEY(chat_id, notification_date, kind)
+            );
+            INSERT INTO chats(chat_id, title, created_at)
+            VALUES (-100, 'goals', '2026-07-09T08:00:00+08:00');
+            INSERT INTO notifications(chat_id, notification_date, kind, sent_at)
+            VALUES (-100, '2026-07-09', 'goals-keyed', '2026-07-09T09:31:00+08:00');
+            """
+        )
+
+    db = Database(db_path)
+    db.init()
+
+    events = db.notification_events_for_day(date(2026, 7, 9), chat_id=-100)
+    assert events == [
+        {
+            "chat_id": -100,
+            "notification_date": "2026-07-09",
+            "kind": "goals-keyed",
+            "status": "sent",
+            "message_id": None,
+            "error": None,
+            "sent_at": "2026-07-09T09:31:00+08:00",
+        }
+    ]
+    with sqlite3.connect(db_path) as conn:
+        legacy = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='notifications'").fetchone()
+    assert legacy is None
 
 
 def test_active_chat_ids_excludes_private_chats_from_scheduled_jobs(tmp_path):
