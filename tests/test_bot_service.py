@@ -235,6 +235,60 @@ def test_after_deadline_registration_grace_accepts_same_day_goals_without_late_f
     assert "Status: <b>⏳ Pending</b>" in service.today_summary(day, chat_id=100, now=FrozenDateTime.now(SGT))
 
 
+def test_after_deadline_goals_edit_preserves_on_time_status_in_today_and_score(tmp_path, monkeypatch):
+    class MutableDateTime(datetime):
+        current_hour = 9
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 9, cls.current_hour, 0, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", MutableDateTime)
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    day = date(2026, 7, 9)
+
+    service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- first a\n- first b\n- first c")
+    MutableDateTime.current_hour = 11
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- edited a\n- edited b\n- edited c")
+    service.handle_text(1, "ernest", "Ernest", 100, "/done 2")
+
+    row = service.db.get_checkin(1, day, chat_id=100)
+    today = service.today_summary(day, chat_id=100, now=MutableDateTime.now(SGT))
+    score = service.month_score(chat_id=100, year=2026, month=7)
+
+    assert "Late:" not in response
+    assert row["goals"] == ["edited a", "edited b", "edited c"]
+    assert row["goals_status"] == "submitted"
+    assert "Status: <b>✅ Pass</b>" in today
+    assert "Ernest — <b>0</b> failed days" in score
+
+
+def test_first_goals_submission_after_deadline_is_still_late(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 9, 11, 0, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    with service.db.connect() as conn:
+        conn.execute(
+            "UPDATE participants SET registered_at=? WHERE chat_id=? AND telegram_user_id=?",
+            ("2026-07-09T08:00:00+08:00", 100, 1),
+        )
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- a\n- b\n- c")
+    row = service.db.get_checkin(1, date(2026, 7, 9), chat_id=100)
+
+    assert "Late:" in response
+    assert row["goals_status"] == "late_submitted"
+    assert "Status: <b>❌ Fail</b>" in service.today_summary(
+        date(2026, 7, 9), chat_id=100, now=FrozenDateTime.now(SGT)
+    )
+
+
 def test_today_summary_marks_missing_completion_failed_after_5am_next_day(tmp_path):
     service = make_service(tmp_path)
     day = date(2026, 7, 9)

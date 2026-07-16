@@ -137,7 +137,7 @@ class AccountabilityService:
             late = datetime.now(SGT).time().hour >= 10 and not self.db.has_registration_grace(
                 user_id, checkin_date, chat_id=chat_id
             )
-            self.db.upsert_goals(user_id, checkin_date, goals, late=late, chat_id=chat_id)
+            late = self.db.upsert_goals(user_id, checkin_date, goals, late=late, chat_id=chat_id)
             late_note = "\n\n⚠️ <b>Late:</b> marked late because this was after 10:00am." if late else ""
             return (
                 f"<b>✅ Goals recorded — {h(display_name)}</b>\n"

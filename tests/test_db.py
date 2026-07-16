@@ -25,6 +25,23 @@ def test_upsert_goals_and_completion(tmp_path):
     assert row["result"] == "pass"
 
 
+def test_upsert_goals_preserves_existing_on_time_submission_status(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "ernest", "Ernest", chat_id=100)
+    day = date(2026, 7, 9)
+
+    assert db.upsert_goals(1, day, ["first a", "first b", "first c"], late=False, chat_id=100) is False
+    original = db.get_checkin(1, day, chat_id=100)
+
+    assert db.upsert_goals(1, day, ["edited a", "edited b", "edited c"], late=True, chat_id=100) is False
+    edited = db.get_checkin(1, day, chat_id=100)
+
+    assert edited["goals"] == ["edited a", "edited b", "edited c"]
+    assert edited["goals_status"] == "submitted"
+    assert edited["goals_submitted_at"] == original["goals_submitted_at"]
+
+
 def test_goal_drafts_are_overwriteable_group_scoped_and_cleared_by_official_goals(tmp_path):
     db = Database(tmp_path / "test.sqlite3")
     db.init()

@@ -280,14 +280,26 @@ class Database:
             ).fetchone()
         return row is not None
 
-    def upsert_goals(self, telegram_user_id: int, checkin_date: date, goals: list[str], *, late: bool, chat_id: int) -> None:
+    def upsert_goals(self, telegram_user_id: int, checkin_date: date, goals: list[str], *, late: bool, chat_id: int) -> bool:
         now = datetime.now(SGT).isoformat(timespec="seconds")
         status = "late_submitted" if late else "submitted"
         with self.connect() as conn:
             existing = conn.execute(
-                "SELECT completed_count FROM checkins WHERE checkin_date=? AND chat_id=? AND telegram_user_id=?",
+                """
+                SELECT goals_json, goals_submitted_at, goals_status, completed_count
+                FROM checkins
+                WHERE checkin_date=? AND chat_id=? AND telegram_user_id=?
+                """,
                 (checkin_date.isoformat(), chat_id, telegram_user_id),
             ).fetchone()
+            existing_on_time = bool(
+                existing and existing["goals_json"] and existing["goals_status"] == "submitted"
+            )
+            if existing_on_time:
+                status = "submitted"
+                submitted_at = existing["goals_submitted_at"]
+            else:
+                submitted_at = now
             completed = existing["completed_count"] if existing else None
             result = assess_day_result(goals_submitted=True, completed_count=completed) if completed is not None else None
             conn.execute(
@@ -301,12 +313,23 @@ class Database:
                     result=excluded.result,
                     updated_at=excluded.updated_at
                 """,
-                (checkin_date.isoformat(), chat_id, telegram_user_id, json.dumps(goals), now, status, completed, result, now),
+                (
+                    checkin_date.isoformat(),
+                    chat_id,
+                    telegram_user_id,
+                    json.dumps(goals),
+                    submitted_at,
+                    status,
+                    completed,
+                    result,
+                    now,
+                ),
             )
             conn.execute(
                 "DELETE FROM goal_drafts WHERE draft_date=? AND chat_id=? AND telegram_user_id=?",
                 (checkin_date.isoformat(), chat_id, telegram_user_id),
             )
+        return status == "late_submitted"
 
     def upsert_goal_draft(self, telegram_user_id: int, draft_date: date, goals: list[str], *, chat_id: int) -> None:
         now = datetime.now(SGT).isoformat(timespec="seconds")
