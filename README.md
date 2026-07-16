@@ -1,5 +1,9 @@
 # Accountability Bot
 
+<p align="center">
+  <img src="assets/telegram-bot-mascot.png" alt="Telegram Accountability Bot mascot" width="320" />
+</p>
+
 A friendly Telegram bot that helps a group stay accountable with daily goals, targeted reminders, status updates, and a monthly leaderboard.
 
 Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
