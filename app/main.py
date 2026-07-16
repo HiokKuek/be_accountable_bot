@@ -94,11 +94,19 @@ async def telegram_webhook(
 
     db.register_chat(int(chat_id), chat_title)
 
+    parsed_goals = parse_goals(text)
+    routes_to_draft = parsed_goals is not None and service.goal_submission_is_next_day_draft(
+        int(user_id), chat_id=int(chat_id)
+    )
+    confirms_draft = text.strip().lower().startswith("/confirmgoals") and db.get_goal_draft(
+        int(user_id), service.today(), chat_id=int(chat_id)
+    ) is not None
     response = service.handle_text(int(user_id), username, display_name, int(chat_id), text, chat_type=chat_type)
     if response:
         await telegram.send_message(int(chat_id), response)
 
-    if chat_type != "private" and parse_goals(text) is not None:
+    official_goals_command = (parsed_goals is not None and not routes_to_draft) or confirms_draft
+    if chat_type != "private" and official_goals_command:
         checkin_date = service.today()
         if db.all_active_users_have_goals(checkin_date, chat_id=int(chat_id)) and db.claim_notification_once(
             "goals-keyed", checkin_date, chat_id=int(chat_id)

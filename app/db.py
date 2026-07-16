@@ -52,7 +52,23 @@ class Database:
             )
             self._ensure_notification_events(conn)
             self._ensure_group_scoped_checkins(conn)
+            self._ensure_goal_drafts(conn)
             self._backfill_participants(conn)
+
+    def _ensure_goal_drafts(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS goal_drafts (
+                draft_date TEXT NOT NULL,
+                chat_id INTEGER NOT NULL REFERENCES chats(chat_id) ON DELETE CASCADE,
+                telegram_user_id INTEGER NOT NULL REFERENCES users(telegram_user_id) ON DELETE CASCADE,
+                goals_json TEXT NOT NULL,
+                drafted_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(draft_date, chat_id, telegram_user_id)
+            )
+            """
+        )
 
     def _ensure_notification_events(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -287,6 +303,76 @@ class Database:
                 """,
                 (checkin_date.isoformat(), chat_id, telegram_user_id, json.dumps(goals), now, status, completed, result, now),
             )
+            conn.execute(
+                "DELETE FROM goal_drafts WHERE draft_date=? AND chat_id=? AND telegram_user_id=?",
+                (checkin_date.isoformat(), chat_id, telegram_user_id),
+            )
+
+    def upsert_goal_draft(self, telegram_user_id: int, draft_date: date, goals: list[str], *, chat_id: int) -> None:
+        now = datetime.now(SGT).isoformat(timespec="seconds")
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO goal_drafts(draft_date, chat_id, telegram_user_id, goals_json, drafted_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(draft_date, chat_id, telegram_user_id) DO UPDATE SET
+                    goals_json=excluded.goals_json,
+                    drafted_at=excluded.drafted_at,
+                    updated_at=excluded.updated_at
+                """,
+                (draft_date.isoformat(), chat_id, telegram_user_id, json.dumps(goals), now, now),
+            )
+
+    def get_goal_draft(self, telegram_user_id: int, draft_date: date, *, chat_id: int) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT draft_date, chat_id, telegram_user_id, goals_json, drafted_at, updated_at
+                FROM goal_drafts
+                WHERE draft_date=? AND chat_id=? AND telegram_user_id=?
+                """,
+                (draft_date.isoformat(), chat_id, telegram_user_id),
+            ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        data["goals"] = json.loads(data.pop("goals_json"))
+        return data
+
+    def promote_goal_draft(self, telegram_user_id: int, draft_date: date, *, late: bool, chat_id: int) -> list[str] | None:
+        draft = self.get_goal_draft(telegram_user_id, draft_date, chat_id=chat_id)
+        if draft is None:
+            return None
+        goals = draft["goals"]
+        self.upsert_goals(telegram_user_id, draft_date, goals, late=late, chat_id=chat_id)
+        return goals
+
+    def draft_goal_users(self, draft_date: date, *, chat_id: int) -> list[dict]:
+        deadline, next_day = self._goal_deadline_bounds(draft_date)
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT u.telegram_user_id, u.username, u.display_name
+                FROM participants p
+                JOIN users u ON u.telegram_user_id=p.telegram_user_id
+                JOIN goal_drafts d
+                  ON d.telegram_user_id=p.telegram_user_id
+                 AND d.chat_id=p.chat_id
+                 AND d.draft_date=?
+                LEFT JOIN checkins c
+                  ON c.telegram_user_id=p.telegram_user_id
+                 AND c.chat_id=p.chat_id
+                 AND c.checkin_date=?
+                WHERE p.chat_id=?
+                  AND p.active=1
+                  AND u.active=1
+                  AND c.goals_json IS NULL
+                  AND NOT (p.registered_at > ? AND p.registered_at < ?)
+                ORDER BY p.registered_at
+                """,
+                (draft_date.isoformat(), draft_date.isoformat(), chat_id, deadline, next_day),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def upsert_completion(self, telegram_user_id: int, checkin_date: date, completed_count: int, *, chat_id: int) -> None:
         now = datetime.now(SGT).isoformat(timespec="seconds")

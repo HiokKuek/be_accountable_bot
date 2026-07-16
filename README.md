@@ -67,6 +67,16 @@ You can also write numbered goals:
 
 The bot will record your goals and show them back to you.
 
+If you report `/done 3`, the bot invites you to plan ahead. A `/goals` submission sent before the next calendar date begins is saved as a draft for the next check-in date. You can overwrite it by sending `/goals` again.
+
+The next morning, either promote that draft:
+
+```text
+/confirmgoals
+```
+
+or send a fresh `/goals` submission. Fresh goals become today's official goals and replace the draft.
+
 ### 4. Report your completion
 
 At night, report how many of your 3 goals you completed:
@@ -94,8 +104,8 @@ All times are in **Singapore time**.
 
 | Time | What happens |
 |---|---|
-| 8:00 AM | Morning reminder tagging only participants who have not submitted goals yet |
-| 9:30 AM | Final goal reminder tagging only participants who have not submitted goals |
+| 8:00 AM | Morning reminder; drafted participants are asked to confirm or replace, while participants with no goals are tagged separately |
+| 9:30 AM | Final goal reminder with the same draft/no-goals distinction |
 | 10:00 AM | Goal deadline summary posts if anyone is still missing |
 | Before 10:00 AM | If all registered participants submit early, the goals summary posts immediately |
 | 8:00 PM | Completion reminder tagging only participants who have not reported `/done` |
@@ -114,6 +124,7 @@ If you do not report completion by **5:00 AM the next day**, the day counts as f
 |---|---|---|
 | `/register` | Join the accountability challenge | `/register` |
 | `/goals` | Submit exactly 3 goals for today | `/goals` followed by 3 lines |
+| `/confirmgoals` | Promote a draft for today into official goals | `/confirmgoals` |
 | `/done 0` | Report that you completed 0 goals | `/done 0` |
 | `/done 1` | Report that you completed 1 goal | `/done 1` |
 | `/done 2` | Report that you completed 2 goals | `/done 2` |
@@ -291,6 +302,7 @@ If you message the bot directly, it will give you a friendly intro and ask you t
 - If not everyone submits before the deadline, the 10:00 AM summary posts with submitted goals and tags only missing participants.
 - Participants who register after 10:00 AM start from tomorrow and are not failed for that same day.
 - Report completion with `/done 0`, `/done 1`, `/done 2`, or `/done 3`.
+- After `/done 3`, send `/goals` that evening to draft the next day's goals; use `/confirmgoals` the next morning or replace them with fresh `/goals`.
 - Complete **2/3 or 3/3** goals to pass.
 - Missing goals or missing completion report counts as a fail.
 - `/score` is a leaderboard ranked by fewest failed days.

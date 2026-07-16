@@ -52,6 +52,7 @@ def test_command_menu_payload_lists_core_commands():
     assert {item["command"] for item in commands} == {
         "register",
         "goals",
+        "confirmgoals",
         "done",
         "today",
         "score",

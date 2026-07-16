@@ -76,6 +76,88 @@ def test_handle_goals_and_done(tmp_path):
     assert "Pass" in response
 
 
+def test_done_three_prompts_for_tomorrows_draft(tmp_path):
+    service = make_service(tmp_path)
+    service.handle_text(1, "ernest", "Ernest", 100, "/register")
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/done 3")
+
+    assert "draft tomorrow's 3 goals" in response
+    assert "/goals" in response
+
+
+def test_goals_after_done_three_draft_tomorrow_and_can_be_overwritten(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 9, 21, 0, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    today = date(2026, 7, 9)
+    tomorrow = date(2026, 7, 10)
+    service.db.upsert_goals(1, today, ["today a", "today b", "today c"], late=False, chat_id=100)
+    service.handle_text(1, "ernest", "Ernest", 100, "/done 3")
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- first a\n- first b\n- first c")
+    service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- new a\n- new b\n- new c")
+
+    assert "Goals drafted" in response
+    assert "10 Jul 2026" in response
+    assert service.db.get_checkin(1, today, chat_id=100)["goals"] == ["today a", "today b", "today c"]
+    assert service.db.get_checkin(1, tomorrow, chat_id=100) is None
+    assert service.db.get_goal_draft(1, tomorrow, chat_id=100)["goals"] == ["new a", "new b", "new c"]
+
+
+def test_confirmgoals_promotes_todays_draft(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 10, 8, 0, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    day = date(2026, 7, 10)
+    service.db.upsert_goal_draft(1, day, ["draft a", "draft b", "draft c"], chat_id=100)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/confirmgoals")
+
+    assert "Draft confirmed" in response
+    assert service.db.get_checkin(1, day, chat_id=100)["goals"] == ["draft a", "draft b", "draft c"]
+    assert service.db.get_goal_draft(1, day, chat_id=100) is None
+
+
+def test_fresh_goals_on_drafted_day_are_official_and_supersede_draft(tmp_path, monkeypatch):
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 7, 10, 8, 0, tzinfo=tz)
+
+    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    day = date(2026, 7, 10)
+    service.db.upsert_goal_draft(1, day, ["draft a", "draft b", "draft c"], chat_id=100)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/goals\n- fresh a\n- fresh b\n- fresh c")
+
+    assert "Goals recorded" in response
+    assert service.db.get_checkin(1, day, chat_id=100)["goals"] == ["fresh a", "fresh b", "fresh c"]
+    assert service.db.get_goal_draft(1, day, chat_id=100) is None
+
+
+def test_confirmgoals_without_todays_draft_explains_how_to_submit(tmp_path):
+    service = make_service(tmp_path)
+    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/confirmgoals")
+
+    assert "No draft to confirm" in response
+    assert "/goals" in response
+
+
 def test_today_summary_shows_logged_goals_as_pending_before_completion_cutoff(tmp_path):
     service = make_service(tmp_path)
     day = date(2026, 7, 9)
@@ -194,6 +276,24 @@ def test_reminders_tag_only_missing_users(tmp_path):
     assert "@cyril" not in goal_reminder
     assert "@cyril" in done_reminder
     assert '<a href="tg://user?id=2">Ernest</a>' in done_reminder
+
+
+def test_goal_reminders_distinguish_drafts_from_users_with_no_goals(tmp_path):
+    service = make_service(tmp_path)
+    day = date(2026, 7, 9)
+    service.db.register_user(1, "drafted", "Drafted", chat_id=100)
+    service.db.register_user(2, "missing", "Missing", chat_id=100)
+    service.db.upsert_goal_draft(1, day, ["a", "b", "c"], chat_id=100)
+
+    morning = service.morning_reminder(chat_id=100, checkin_date=day)
+    final = service.missing_goals_reminder(chat_id=100, checkin_date=day)
+
+    for response in (morning, final):
+        assert "Draft ready — confirm or replace" in response
+        assert "@drafted" in response
+        assert "/confirmgoals" in response
+        assert "Still missing goals" in response
+        assert "@missing" in response
 
 
 def test_goal_confirmation_summary_thanks_users_shows_goals_and_api_qotd(tmp_path):

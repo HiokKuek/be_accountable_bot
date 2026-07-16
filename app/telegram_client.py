@@ -21,6 +21,7 @@ class TelegramClient:
         return [
             {"command": "register", "description": "Join the accountability challenge"},
             {"command": "goals", "description": "Submit today's 3 goals"},
+            {"command": "confirmgoals", "description": "Confirm today's drafted goals"},
             {"command": "done", "description": "Report completed goals: /done 0-3"},
             {"command": "today", "description": "Show today's status"},
             {"command": "score", "description": "Show this month's leaderboard"},

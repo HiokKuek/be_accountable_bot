@@ -44,6 +44,15 @@ class AccountabilityService:
             return now.date() - timedelta(days=1)
         return now.date()
 
+    def goal_submission_is_next_day_draft(
+        self, user_id: int, *, chat_id: int, now: datetime | None = None
+    ) -> bool:
+        now = now or datetime.now(SGT)
+        completion_date = now.date() - timedelta(days=1) if now.hour < 5 else now.date()
+        draft_date = completion_date + timedelta(days=1)
+        completion = self.db.get_checkin(user_id, completion_date, chat_id=chat_id)
+        return now.date() < draft_date and bool(completion and completion.get("completed_count") == 3)
+
     def handle_text(
         self,
         user_id: int,
@@ -111,7 +120,20 @@ class AccountabilityService:
 
         goals = parse_goals(text)
         if goals is not None:
-            checkin_date = self.today()
+            now = datetime.now(SGT)
+            checkin_date = now.date()
+            completion_date = self.current_checkin_date()
+            draft_date = completion_date + timedelta(days=1)
+            if self.goal_submission_is_next_day_draft(user_id, chat_id=chat_id, now=now):
+                self.db.upsert_goal_draft(user_id, draft_date, goals, chat_id=chat_id)
+                return (
+                    f"<b>📝 Goals drafted — {h(display_name)}</b>\n"
+                    f"<i>For {short_date(draft_date)}</i>\n"
+                    f"{DIVIDER}\n"
+                    + "\n".join(goal_lines(goals))
+                    + "\n\nSend <code>/goals</code> again tonight to overwrite this draft. "
+                    "Tomorrow, send <code>/confirmgoals</code> to make it official, or send fresh <code>/goals</code> to replace it."
+                )
             late = datetime.now(SGT).time().hour >= 10 and not self.db.has_registration_grace(
                 user_id, checkin_date, chat_id=chat_id
             )
@@ -132,6 +154,26 @@ class AccountabilityService:
                 + command_example("/goals\n- goal 1\n- goal 2\n- goal 3")
             )
 
+        if text.lower().startswith("/confirmgoals"):
+            checkin_date = self.today()
+            late = datetime.now(SGT).time().hour >= 10 and not self.db.has_registration_grace(
+                user_id, checkin_date, chat_id=chat_id
+            )
+            goals = self.db.promote_goal_draft(user_id, checkin_date, late=late, chat_id=chat_id)
+            if goals is None:
+                return (
+                    "<b>📝 No draft to confirm</b>\n"
+                    f"{DIVIDER}\n"
+                    "Send <code>/goals</code> with 3 bullet lines to record today's goals."
+                )
+            late_note = "\n\n⚠️ <b>Late:</b> marked late because this was after 10:00am." if late else ""
+            return (
+                f"<b>✅ Draft confirmed — {h(display_name)}</b>\n"
+                f"<i>{short_date(checkin_date)}</i>{late_note}\n"
+                f"{DIVIDER}\n"
+                + "\n".join(goal_lines(goals))
+            )
+
         if text.lower().startswith("/done"):
             count = parse_done_count(text)
             if count is None:
@@ -146,12 +188,17 @@ class AccountabilityService:
             passed = count >= 2
             result = "✅ Pass" if passed else "❌ Fail"
             encouragement = "Nice — 2/3 or better keeps the day green." if passed else "Reset tomorrow — log goals early and aim for 2/3."
+            draft_prompt = (
+                "\n\n<b>Plan ahead</b>\nSend <code>/goals</code> now to draft tomorrow's 3 goals."
+                if count == 3
+                else ""
+            )
             return (
                 f"<b>{result} recorded — {h(display_name)}</b>\n"
                 f"{DIVIDER}\n"
                 f"Date: <b>{short_date(checkin_date)}</b>\n"
                 f"Progress: <b>{count}/3</b>\n\n"
-                f"<i>{encouragement}</i>"
+                f"<i>{encouragement}</i>{draft_prompt}"
             )
 
         if text.lower().startswith("/today"):
@@ -193,6 +240,7 @@ class AccountabilityService:
             f"{DIVIDER}\n"
             "<code>/register</code> — join the challenge\n"
             "<code>/goals</code> — submit today's 3 goals\n"
+            "<code>/confirmgoals</code> — confirm a draft for today\n"
             "<code>/done 0</code> to <code>/done 3</code> — report completed goals\n"
             "<code>/today</code> — show today's status\n"
             "<code>/score</code> — show current month leaderboard\n"
@@ -210,8 +258,9 @@ class AccountabilityService:
             "2. Complete at least <b>2/3</b> goals to pass.\n"
             "3. Report with <code>/done 0</code> to <code>/done 3</code> by <b>5:00am next day</b>.\n"
             "4. Missing goals or missing completion report = failed day.\n"
-            "5. New participants who register after <b>10:00am SGT</b> start from tomorrow; same-day goals are optional and not marked late.\n"
-            f"6. <code>/score</code> ranks the group by fewest failed days. Each failed day counts as <b>${self.penalty_amount}</b> in penalties."
+            "5. After <code>/done 3</code>, you can send <code>/goals</code> that night to draft tomorrow's goals. Confirm them tomorrow with <code>/confirmgoals</code>, or replace them with fresh <code>/goals</code>.\n"
+            "6. New participants who register after <b>10:00am SGT</b> start from tomorrow; same-day goals are optional and not marked late.\n"
+            f"7. <code>/score</code> ranks the group by fewest failed days. Each failed day counts as <b>${self.penalty_amount}</b> in penalties."
         )
 
     def today_summary(self, checkin_date: date, *, chat_id: int, now: datetime | None = None) -> str:
@@ -335,18 +384,30 @@ class AccountabilityService:
         return "\n".join(lines)
 
     def morning_reminder(self, *, chat_id: int | None = None, checkin_date: date | None = None) -> str | None:
-        mentions = ""
+        reminder_blocks = ""
         if chat_id is not None:
             day = checkin_date or self.today()
             missing = self.db.missing_goal_users(day, chat_id=chat_id)
             if not missing:
                 return None
-            mentions = "\n\n<b>Still missing goals</b>\n" + ", ".join(self._mention(u) for u in missing)
+            drafted_ids = {u["telegram_user_id"] for u in self.db.draft_goal_users(day, chat_id=chat_id)}
+            drafted = [u for u in missing if u["telegram_user_id"] in drafted_ids]
+            no_goals = [u for u in missing if u["telegram_user_id"] not in drafted_ids]
+            blocks = []
+            if drafted:
+                blocks.append(
+                    "<b>Draft ready — confirm or replace</b>\n"
+                    + ", ".join(self._mention(u) for u in drafted)
+                    + "\nUse <code>/confirmgoals</code>, or send fresh <code>/goals</code>."
+                )
+            if no_goals:
+                blocks.append("<b>Still missing goals</b>\n" + ", ".join(self._mention(u) for u in no_goals))
+            reminder_blocks = "\n\n" + "\n\n".join(blocks)
         return (
             "<b>☀️ Morning Check-in</b>\n"
             f"{DIVIDER}\n"
             "Submit your 3 goals before <b>10:00am SGT</b>."
-            f"{mentions}\n\n"
+            f"{reminder_blocks}\n\n"
             "<b>Copy this format</b>\n"
             + command_example("/goals\n- goal 1\n- goal 2\n- goal 3")
         )
@@ -356,12 +417,26 @@ class AccountabilityService:
         missing = self.db.missing_goal_users(day, chat_id=chat_id)
         if not missing:
             return None
-        mentions = ", ".join(self._mention(u) for u in missing)
+        drafted_ids = {u["telegram_user_id"] for u in self.db.draft_goal_users(day, chat_id=chat_id)}
+        drafted = [u for u in missing if u["telegram_user_id"] in drafted_ids]
+        no_goals = [u for u in missing if u["telegram_user_id"] not in drafted_ids]
+        blocks = []
+        if drafted:
+            blocks.append(
+                "<b>Draft ready — confirm or replace</b>\n"
+                + ", ".join(self._mention(u) for u in drafted)
+                + "\nSend <code>/confirmgoals</code>, or fresh <code>/goals</code> to replace the draft."
+            )
+        if no_goals:
+            blocks.append(
+                f"<b>Still missing goals for {short_date(day)}</b>\n"
+                + ", ".join(self._mention(u) for u in no_goals)
+                + "\nSend <code>/goals</code> with 3 bullet lines before 10:00am."
+            )
         return (
             "<b>⏰ Goal reminder</b>\n"
             f"{DIVIDER}\n"
-            f"Still missing goals for <b>{short_date(day)}</b>:\n{mentions}\n\n"
-            "Send <code>/goals</code> with 3 bullet lines before 10:00am."
+            + "\n\n".join(blocks)
         )
 
     def completion_reminder(self, *, chat_id: int, checkin_date: date | None = None) -> str | None:

@@ -25,6 +25,26 @@ def test_upsert_goals_and_completion(tmp_path):
     assert row["result"] == "pass"
 
 
+def test_goal_drafts_are_overwriteable_group_scoped_and_cleared_by_official_goals(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    db.register_user(1, "ernest", "Ernest", chat_id=100)
+    db.register_user(1, "ernest", "Ernest", chat_id=200)
+    day = date(2026, 7, 10)
+
+    db.upsert_goal_draft(1, day, ["first a", "first b", "first c"], chat_id=100)
+    db.upsert_goal_draft(1, day, ["other a", "other b", "other c"], chat_id=200)
+    db.upsert_goal_draft(1, day, ["new a", "new b", "new c"], chat_id=100)
+
+    assert db.get_goal_draft(1, day, chat_id=100)["goals"] == ["new a", "new b", "new c"]
+    assert db.get_goal_draft(1, day, chat_id=200)["goals"] == ["other a", "other b", "other c"]
+
+    db.upsert_goals(1, day, ["official a", "official b", "official c"], late=False, chat_id=100)
+
+    assert db.get_goal_draft(1, day, chat_id=100) is None
+    assert db.get_goal_draft(1, day, chat_id=200) is not None
+
+
 def test_close_day_marks_missing_goals_and_missing_completion_as_fail(tmp_path):
     db = Database(tmp_path / "test.sqlite3")
     db.init()
