@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from app.bible import BibleVerseUnavailable
 from app.db import Database
 from app.service import AccountabilityService
 
@@ -22,6 +23,60 @@ class FakeQotdClient:
     def quote_of_the_day(self):
         self.calls += 1
         return self.quote, self.author
+
+
+class FakeBibleVerseClient:
+    def __init__(self, verse="Be still.", reference="Psalm 46:10", error=False):
+        self.verse = verse
+        self.reference = reference
+        self.error = error
+        self.calls = 0
+
+    def random_verse(self):
+        self.calls += 1
+        if self.error:
+            raise BibleVerseUnavailable("offline")
+        return self.verse, self.reference
+
+
+def test_amen_returns_escaped_api_verse_without_registration(tmp_path):
+    bible_client = FakeBibleVerseClient("Love <God> & others.", "1 John 4:7 & 8")
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, bible_verse_client=bible_client)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/amen")
+
+    assert response == (
+        "<b>🙏 Amen</b>\n"
+        "<blockquote>Love &lt;God&gt; &amp; others.</blockquote>\n"
+        "— <b>1 John 4:7 &amp; 8</b>"
+    )
+    assert bible_client.calls == 1
+    assert not service.db.is_registered(1, chat_id=100)
+
+
+def test_amen_supports_telegram_bot_mention(tmp_path):
+    bible_client = FakeBibleVerseClient()
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, bible_verse_client=bible_client)
+
+    response = service.handle_text(1, None, "Ernest", 100, "/amen@be_accountable_bot")
+
+    assert "Psalm 46:10" in response
+    assert bible_client.calls == 1
+
+
+def test_amen_handles_api_failure_gracefully(tmp_path):
+    bible_client = FakeBibleVerseClient(error=True)
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, bible_verse_client=bible_client)
+
+    response = service.handle_text(1, None, "Ernest", 100, "/amen")
+
+    assert "Verse temporarily unavailable" in response
 
 
 def test_handle_register(tmp_path):

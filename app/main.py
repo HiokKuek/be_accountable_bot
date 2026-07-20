@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from app.bible import BibleVerseApiClient
 from app.db import Database
 from app.scheduler import build_scheduler
 from app.service import AccountabilityService
@@ -16,7 +17,13 @@ from app.telegram_updates import bot_was_added_to_chat
 settings = Settings()
 db = Database(settings.database_path)
 qotd_client = QotdApiClient(api_url=settings.qotd_api_url)
-service = AccountabilityService(db, penalty_amount=settings.penalty_amount, qotd_client=qotd_client)
+bible_verse_client = BibleVerseApiClient(api_url=settings.bible_verse_api_url)
+service = AccountabilityService(
+    db,
+    penalty_amount=settings.penalty_amount,
+    qotd_client=qotd_client,
+    bible_verse_client=bible_verse_client,
+)
 telegram = TelegramClient(settings.telegram_bot_token)
 scheduler = build_scheduler(service, telegram)
 

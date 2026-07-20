@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.bible import DEFAULT_BIBLE_VERSE_API_URL
 from app.qotd import DEFAULT_QOTD_API_URL
 
 
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     penalty_amount: int = 5
     timezone: str = "Asia/Singapore"
     qotd_api_url: str = DEFAULT_QOTD_API_URL
+    bible_verse_api_url: str = DEFAULT_BIBLE_VERSE_API_URL
 
     @property
     def webhook_path(self) -> str:
