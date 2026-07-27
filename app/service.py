@@ -5,6 +5,7 @@ from html import escape
 from zoneinfo import ZoneInfo
 
 from app.bible import BibleVerseApiClient, BibleVerseClient, BibleVerseUnavailable
+from app.buddha import BuddhaQuoteClient, BuddhaQuoteUnavailable, LocalBuddhaQuoteClient
 from app.db import Database
 from app.domain import monthly_leaderboard
 from app.parsing import parse_done_count, parse_goals
@@ -38,11 +39,13 @@ class AccountabilityService:
         penalty_amount: int = 5,
         qotd_client: QotdClient | None = None,
         bible_verse_client: BibleVerseClient | None = None,
+        buddha_quote_client: BuddhaQuoteClient | None = None,
     ):
         self.db = db
         self.penalty_amount = penalty_amount
         self.qotd_client = qotd_client or QotdApiClient()
         self.bible_verse_client = bible_verse_client or BibleVerseApiClient()
+        self.buddha_quote_client = buddha_quote_client or LocalBuddhaQuoteClient()
 
     def today(self) -> date:
         return datetime.now(SGT).date()
@@ -102,6 +105,8 @@ class AccountabilityService:
         command = text.split(maxsplit=1)[0].lower().split("@", maxsplit=1)[0]
         if command == "/amen":
             return self.amen()
+        if command == "/buddha":
+            return self.buddha()
 
         if not self.db.is_registered(user_id, chat_id=chat_id):
             return (
@@ -359,6 +364,18 @@ class AccountabilityService:
             return "<b>🙏 Amen</b>\n<blockquote><i>Verse temporarily unavailable.</i></blockquote>"
 
         return f"<b>🙏 Amen</b>\n<blockquote>{h(verse)}</blockquote>\n— <b>{h(reference)}</b>"
+
+    def buddha(self) -> str:
+        try:
+            quote, category = self.buddha_quote_client.random_quote()
+        except BuddhaQuoteUnavailable:
+            return "<b>☸️ Buddha</b>\n<blockquote><i>Reflection temporarily unavailable.</i></blockquote>"
+
+        return (
+            "<b>☸️ Buddha</b>\n"
+            f"<i>Original reflection · {h(category.replace('_', ' ').title())}</i>\n"
+            f"<blockquote>{h(quote)}</blockquote>"
+        )
 
     def _display_result(self, row: dict, checkin_date: date, *, now: datetime) -> str:
         goals = row.get("goals") or []

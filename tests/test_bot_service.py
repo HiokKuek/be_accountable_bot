@@ -2,6 +2,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.bible import BibleVerseUnavailable
+from app.buddha import BuddhaQuoteUnavailable
 from app.db import Database
 from app.service import AccountabilityService
 
@@ -37,6 +38,20 @@ class FakeBibleVerseClient:
         if self.error:
             raise BibleVerseUnavailable("offline")
         return self.verse, self.reference
+
+
+class FakeBuddhaQuoteClient:
+    def __init__(self, quote="Take one careful step.", category="mindfulness", error=False):
+        self.quote = quote
+        self.category = category
+        self.error = error
+        self.calls = 0
+
+    def random_quote(self):
+        self.calls += 1
+        if self.error:
+            raise BuddhaQuoteUnavailable("unavailable")
+        return self.quote, self.category
 
 
 def test_amen_returns_escaped_api_verse_without_registration(tmp_path):
@@ -77,6 +92,46 @@ def test_amen_handles_api_failure_gracefully(tmp_path):
     response = service.handle_text(1, None, "Ernest", 100, "/amen")
 
     assert "Verse temporarily unavailable" in response
+
+
+def test_buddha_returns_escaped_original_reflection_without_registration(tmp_path):
+    buddha_client = FakeBuddhaQuoteClient("Release <yesterday> & rest.", "letting go")
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/buddha")
+
+    assert response == (
+        "<b>☸️ Buddha</b>\n"
+        "<i>Original reflection · Letting Go</i>\n"
+        "<blockquote>Release &lt;yesterday&gt; &amp; rest.</blockquote>"
+    )
+    assert buddha_client.calls == 1
+    assert not service.db.is_registered(1, chat_id=100)
+
+
+def test_buddha_supports_telegram_bot_mention(tmp_path):
+    buddha_client = FakeBuddhaQuoteClient()
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+
+    response = service.handle_text(1, None, "Ernest", 100, "/buddha@be_accountable_bot")
+
+    assert "Take one careful step." in response
+    assert buddha_client.calls == 1
+
+
+def test_buddha_handles_local_quote_failure_gracefully(tmp_path):
+    buddha_client = FakeBuddhaQuoteClient(error=True)
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+
+    response = service.handle_text(1, None, "Ernest", 100, "/buddha")
+
+    assert "Reflection temporarily unavailable" in response
 
 
 def test_handle_register(tmp_path):

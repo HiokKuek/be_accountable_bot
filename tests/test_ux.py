@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.db import Database
@@ -62,6 +64,19 @@ def test_command_menu_payload_lists_core_commands():
     }
     assert all(not item["command"].startswith("/") for item in commands)
     assert all(item["description"] for item in commands)
+
+
+def test_hidden_buddha_command_does_not_leak_into_discovery_surfaces(tmp_path):
+    service = make_service(tmp_path)
+    discovery_surfaces = [
+        (Path(__file__).parents[1] / "README.md").read_text(),
+        service.intro_text(),
+        service.help_text(),
+        service.rules_text(),
+        repr(TelegramClient.command_menu()),
+    ]
+
+    assert all("buddha" not in surface.lower() for surface in discovery_surfaces)
 
 
 @pytest.mark.parametrize(
