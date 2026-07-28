@@ -36,7 +36,7 @@ def goal_lines(goals: list[str]) -> list[str]:
 @dataclass(frozen=True)
 class AnimationReply:
     animation: str
-    caption: str
+    caption: str | None = None
 
 
 class AccountabilityService:
@@ -241,10 +241,7 @@ class AccountabilityService:
 
     def angry(self) -> AnimationReply:
         reaction = self.angry_gif_client.random_reaction()
-        return AnimationReply(
-            animation=reaction.url,
-            caption=f"<b>😡 Angry accountability check</b>\n{h(reaction.caption)}",
-        )
+        return AnimationReply(animation=reaction.url)
 
     def intro_text(self) -> str:
         return (

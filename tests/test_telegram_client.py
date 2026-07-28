@@ -74,7 +74,26 @@ def test_pin_chat_message_posts_to_telegram_api(monkeypatch):
     )
 
 
-def test_send_animation_posts_media_and_safe_caption_mode(monkeypatch):
+def test_send_animation_posts_media_without_caption_by_default(monkeypatch):
+    FakeAsyncClient.requests = []
+    monkeypatch.setattr(telegram_client.httpx, "AsyncClient", FakeAsyncClient)
+    client = TelegramClient("TOKEN")
+
+    message_id = asyncio.run(client.send_animation(100, "https://example.com/angry.gif"))
+
+    assert message_id == 456
+    assert FakeAsyncClient.requests == [
+        (
+            "https://api.telegram.org/botTOKEN/sendAnimation",
+            {
+                "chat_id": 100,
+                "animation": "https://example.com/angry.gif",
+            },
+        )
+    ]
+
+
+def test_send_animation_includes_caption_when_provided(monkeypatch):
     FakeAsyncClient.requests = []
     monkeypatch.setattr(telegram_client.httpx, "AsyncClient", FakeAsyncClient)
     client = TelegramClient("TOKEN")

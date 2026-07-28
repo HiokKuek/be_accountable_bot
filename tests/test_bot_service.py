@@ -5,7 +5,7 @@ from app.angry import AngryReaction
 from app.bible import BibleVerseUnavailable
 from app.buddha import BuddhaQuoteUnavailable
 from app.db import Database
-from app.service import AccountabilityService
+from app.service import AccountabilityService, AnimationReply
 
 SGT = ZoneInfo("Asia/Singapore")
 
@@ -73,10 +73,9 @@ def test_angry_returns_escaped_animation_before_registration(tmp_path):
 
     response = service.handle_text(1, "ernest", "Ernest", 100, "/angry")
 
+    assert isinstance(response, AnimationReply)
     assert response.animation == "https://example.com/angry.gif"
-    assert response.caption == (
-        "<b>😡 Angry accountability check</b>\nNot &lt;done&gt; &amp; annoyed."
-    )
+    assert response.caption is None
     assert angry_client.calls == 1
     assert not service.db.is_registered(1, chat_id=100)
 
