@@ -1,3 +1,5 @@
+import asyncio
+
 from app import telegram_client
 from app.telegram_client import TelegramClient
 
@@ -32,6 +34,23 @@ class FakeSyncClient:
         return FakeResponse({"ok": True, "result": True})
 
 
+class FakeAsyncClient:
+    requests = []
+
+    def __init__(self, timeout):
+        self.timeout = timeout
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, url, json):
+        self.requests.append((url, json))
+        return FakeResponse({"ok": True, "result": {"message_id": 456}})
+
+
 def test_send_message_returns_message_id(monkeypatch):
     FakeSyncClient.requests = []
     monkeypatch.setattr(telegram_client.httpx, "Client", FakeSyncClient)
@@ -53,3 +72,32 @@ def test_pin_chat_message_posts_to_telegram_api(monkeypatch):
         "https://api.telegram.org/botTOKEN/pinChatMessage",
         {"chat_id": 100, "message_id": 123, "disable_notification": True},
     )
+
+
+def test_send_animation_posts_media_and_safe_caption_mode(monkeypatch):
+    FakeAsyncClient.requests = []
+    monkeypatch.setattr(telegram_client.httpx, "AsyncClient", FakeAsyncClient)
+    client = TelegramClient("TOKEN")
+
+    message_id = asyncio.run(
+        client.send_animation(100, "https://example.com/angry.gif", "<b>Angry</b> &amp; safe")
+    )
+
+    assert message_id == 456
+    assert FakeAsyncClient.requests == [
+        (
+            "https://api.telegram.org/botTOKEN/sendAnimation",
+            {
+                "chat_id": 100,
+                "animation": "https://example.com/angry.gif",
+                "caption": "<b>Angry</b> &amp; safe",
+                "parse_mode": "HTML",
+            },
+        )
+    ]
+
+
+def test_send_animation_is_disabled_without_token():
+    client = TelegramClient("")
+
+    assert asyncio.run(client.send_animation(100, "https://example.com/angry.gif", "angry")) is None

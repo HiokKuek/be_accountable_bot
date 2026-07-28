@@ -79,6 +79,20 @@ def test_hidden_buddha_command_does_not_leak_into_discovery_surfaces(tmp_path):
     assert all("buddha" not in surface.lower() for surface in discovery_surfaces)
 
 
+def test_hidden_angry_command_does_not_leak_into_discovery_surfaces(tmp_path):
+    service = make_service(tmp_path)
+    discovery_surfaces = [
+        (Path(__file__).parents[1] / "README.md").read_text(),
+        service.intro_text(),
+        service.help_text(),
+        service.rules_text(),
+        service.private_chat_text(),
+        repr(TelegramClient.command_menu()),
+    ]
+
+    assert all("angry" not in surface.lower() for surface in discovery_surfaces)
+
+
 @pytest.mark.parametrize(
     "update,bot_id,expected",
     [

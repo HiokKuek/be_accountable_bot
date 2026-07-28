@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Singapore"
     qotd_api_url: str = DEFAULT_QOTD_API_URL
     bible_verse_api_url: str = DEFAULT_BIBLE_VERSE_API_URL
+    tenor_api_key: str = ""
 
     @property
     def webhook_path(self) -> str:

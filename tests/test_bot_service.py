@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from app.angry import AngryReaction
 from app.bible import BibleVerseUnavailable
 from app.buddha import BuddhaQuoteUnavailable
 from app.db import Database
@@ -52,6 +53,59 @@ class FakeBuddhaQuoteClient:
         if self.error:
             raise BuddhaQuoteUnavailable("unavailable")
         return self.quote, self.category
+
+
+class FakeAngryGifClient:
+    def __init__(self, caption="Not <done> & annoyed."):
+        self.caption = caption
+        self.calls = 0
+
+    def random_reaction(self):
+        self.calls += 1
+        return AngryReaction("https://example.com/angry.gif", self.caption)
+
+
+def test_angry_returns_escaped_animation_before_registration(tmp_path):
+    angry_client = FakeAngryGifClient()
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, angry_gif_client=angry_client)
+
+    response = service.handle_text(1, "ernest", "Ernest", 100, "/angry")
+
+    assert response.animation == "https://example.com/angry.gif"
+    assert response.caption == (
+        "<b>😡 Angry accountability check</b>\nNot &lt;done&gt; &amp; annoyed."
+    )
+    assert angry_client.calls == 1
+    assert not service.db.is_registered(1, chat_id=100)
+
+
+def test_angry_supports_telegram_bot_mention_before_registration(tmp_path):
+    angry_client = FakeAngryGifClient()
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, angry_gif_client=angry_client)
+
+    response = service.handle_text(1, None, "Ernest", 100, "/angry@be_accountable_bot")
+
+    assert response.animation == "https://example.com/angry.gif"
+    assert angry_client.calls == 1
+    assert not service.db.is_registered(1, chat_id=100)
+
+
+def test_angry_keeps_private_chat_behavior_unchanged(tmp_path):
+    angry_client = FakeAngryGifClient()
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    service = AccountabilityService(db, angry_gif_client=angry_client)
+
+    response = service.handle_text(
+        1, "ernest", "Ernest", 100, "/angry", chat_type="private"
+    )
+
+    assert "can't run in a private chat" in response.lower()
+    assert angry_client.calls == 0
 
 
 def test_amen_returns_escaped_api_verse_without_registration(tmp_path):

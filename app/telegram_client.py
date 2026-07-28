@@ -79,6 +79,25 @@ class TelegramClient:
         message_id = result.get("message_id")
         return int(message_id) if message_id is not None else None
 
+    async def send_animation(self, chat_id: int, animation: str, caption: str) -> int | None:
+        if not self.enabled():
+            return None
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{self.base_url}/sendAnimation",
+                json={
+                    "chat_id": chat_id,
+                    "animation": animation,
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+        result = payload.get("result") or {}
+        message_id = result.get("message_id")
+        return int(message_id) if message_id is not None else None
+
     async def pin_chat_message(self, chat_id: int, message_id: int) -> bool:
         if not self.enabled():
             return False

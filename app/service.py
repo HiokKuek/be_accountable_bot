@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
+from app.angry import AngryGifClient, AngryGifProvider
 from app.bible import BibleVerseApiClient, BibleVerseClient, BibleVerseUnavailable
 from app.buddha import BuddhaQuoteClient, BuddhaQuoteUnavailable, LocalBuddhaQuoteClient
 from app.db import Database
@@ -31,6 +33,12 @@ def goal_lines(goals: list[str]) -> list[str]:
     return [f"{idx}. {h(goal)}" for idx, goal in enumerate(goals, start=1)]
 
 
+@dataclass(frozen=True)
+class AnimationReply:
+    animation: str
+    caption: str
+
+
 class AccountabilityService:
     def __init__(
         self,
@@ -40,12 +48,14 @@ class AccountabilityService:
         qotd_client: QotdClient | None = None,
         bible_verse_client: BibleVerseClient | None = None,
         buddha_quote_client: BuddhaQuoteClient | None = None,
+        angry_gif_client: AngryGifProvider | None = None,
     ):
         self.db = db
         self.penalty_amount = penalty_amount
         self.qotd_client = qotd_client or QotdApiClient()
         self.bible_verse_client = bible_verse_client or BibleVerseApiClient()
         self.buddha_quote_client = buddha_quote_client or LocalBuddhaQuoteClient()
+        self.angry_gif_client = angry_gif_client or AngryGifClient()
 
     def today(self) -> date:
         return datetime.now(SGT).date()
@@ -74,7 +84,7 @@ class AccountabilityService:
         text: str,
         *,
         chat_type: str | None = None,
-    ) -> str | None:
+    ) -> str | AnimationReply | None:
         text = text.strip()
         if chat_type == "private":
             return self.private_chat_text()
@@ -107,6 +117,8 @@ class AccountabilityService:
             return self.amen()
         if command == "/buddha":
             return self.buddha()
+        if command == "/angry":
+            return self.angry()
 
         if not self.db.is_registered(user_id, chat_id=chat_id):
             return (
@@ -226,6 +238,13 @@ class AccountabilityService:
             return self.month_score(chat_id=chat_id)
 
         return None
+
+    def angry(self) -> AnimationReply:
+        reaction = self.angry_gif_client.random_reaction()
+        return AnimationReply(
+            animation=reaction.url,
+            caption=f"<b>😡 Angry accountability check</b>\n{h(reaction.caption)}",
+        )
 
     def intro_text(self) -> str:
         return (

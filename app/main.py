@@ -4,10 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from app.angry import AngryGifClient
 from app.bible import BibleVerseApiClient
 from app.db import Database
 from app.scheduler import build_scheduler
-from app.service import AccountabilityService
+from app.service import AccountabilityService, AnimationReply
 from app.parsing import parse_goals
 from app.qotd import QotdApiClient
 from app.settings import Settings
@@ -23,6 +24,7 @@ service = AccountabilityService(
     penalty_amount=settings.penalty_amount,
     qotd_client=qotd_client,
     bible_verse_client=bible_verse_client,
+    angry_gif_client=AngryGifClient(tenor_api_key=settings.tenor_api_key),
 )
 telegram = TelegramClient(settings.telegram_bot_token)
 scheduler = build_scheduler(service, telegram)
@@ -109,7 +111,9 @@ async def telegram_webhook(
         int(user_id), service.today(), chat_id=int(chat_id)
     ) is not None
     response = service.handle_text(int(user_id), username, display_name, int(chat_id), text, chat_type=chat_type)
-    if response:
+    if isinstance(response, AnimationReply):
+        await telegram.send_animation(int(chat_id), response.animation, response.caption)
+    elif response:
         await telegram.send_message(int(chat_id), response)
 
     official_goals_command = (parsed_goals is not None and not routes_to_draft) or confirms_draft
