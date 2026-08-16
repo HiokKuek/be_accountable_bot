@@ -1,7 +1,7 @@
 import asyncio
 
-from app import telegram_client
-from app.telegram_client import TelegramClient
+from app.bot.telegram import telegram_client
+from app.bot.telegram.telegram_client import TelegramClient
 
 
 class FakeResponse:

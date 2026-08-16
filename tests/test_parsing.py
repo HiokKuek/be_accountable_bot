@@ -1,4 +1,4 @@
-from app.parsing import parse_done_count, parse_goals
+from app.bot.handlers.parsing import parse_done_count, parse_goals
 
 
 def test_parse_done_count_accepts_zero_to_three():

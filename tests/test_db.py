@@ -1,7 +1,7 @@
 from datetime import date
 import sqlite3
 
-from app.db import Database
+from app.repositories.db import Database
 
 
 def test_register_and_list_active_users(tmp_path):

@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.service import AccountabilityService
-from app.telegram_client import TelegramClient
+from app.services.accountability import AccountabilityService
+from app.bot.telegram.telegram_client import TelegramClient
 
 SGT = ZoneInfo("Asia/Singapore")
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-from app.buddha import LocalBuddhaQuoteClient, ORIGINAL_REFLECTIONS
+from app.clients.buddha import LocalBuddhaQuoteClient, ORIGINAL_REFLECTIONS
 
 
 def test_reflection_bank_has_five_populated_categories():

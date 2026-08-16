@@ -5,13 +5,13 @@ from datetime import date, datetime, time, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from app.angry import AngryGifClient, AngryGifProvider
-from app.bible import BibleVerseApiClient, BibleVerseClient, BibleVerseUnavailable
-from app.buddha import BuddhaQuoteClient, BuddhaQuoteUnavailable, LocalBuddhaQuoteClient
-from app.db import Database
-from app.domain import monthly_leaderboard
-from app.parsing import parse_done_count, parse_goals
-from app.qotd import QotdApiClient, QotdClient, QotdUnavailable
+from app.clients.angry import AngryGifClient, AngryGifProvider
+from app.clients.bible import BibleVerseApiClient, BibleVerseClient, BibleVerseUnavailable
+from app.clients.buddha import BuddhaQuoteClient, BuddhaQuoteUnavailable, LocalBuddhaQuoteClient
+from app.repositories.db import Database
+from app.logic.rules import monthly_leaderboard
+from app.bot.handlers.parsing import parse_done_count, parse_goals
+from app.clients.qotd import QotdApiClient, QotdClient, QotdUnavailable
 
 SGT = ZoneInfo("Asia/Singapore")
 DIVIDER = "━━━━━━━━━━━━"

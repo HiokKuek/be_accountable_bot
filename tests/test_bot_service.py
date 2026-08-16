@@ -1,11 +1,11 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from app.angry import AngryReaction
-from app.bible import BibleVerseUnavailable
-from app.buddha import BuddhaQuoteUnavailable
-from app.db import Database
-from app.service import AccountabilityService, AnimationReply
+from app.clients.angry import AngryReaction
+from app.clients.bible import BibleVerseUnavailable
+from app.clients.buddha import BuddhaQuoteUnavailable
+from app.repositories.db import Database
+from app.services.accountability import AccountabilityService, AnimationReply
 
 SGT = ZoneInfo("Asia/Singapore")
 
@@ -255,7 +255,7 @@ def test_goals_after_done_three_draft_tomorrow_and_can_be_overwritten(tmp_path, 
         def now(cls, tz=None):
             return cls(2026, 7, 9, 21, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     today = date(2026, 7, 9)
@@ -279,7 +279,7 @@ def test_confirmgoals_promotes_todays_draft(tmp_path, monkeypatch):
         def now(cls, tz=None):
             return cls(2026, 7, 10, 8, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 10)
@@ -298,7 +298,7 @@ def test_fresh_goals_on_drafted_day_are_official_and_supersede_draft(tmp_path, m
         def now(cls, tz=None):
             return cls(2026, 7, 10, 8, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 10)
@@ -377,7 +377,7 @@ def test_after_deadline_registration_grace_accepts_same_day_goals_without_late_f
         def now(cls, tz=None):
             return cls(2026, 7, 9, 10, 30, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     day = date(2026, 7, 9)
     service.db.register_user(1, "late", "Late Joiner", chat_id=100)
@@ -406,7 +406,7 @@ def test_after_deadline_goals_edit_preserves_on_time_status_in_today_and_score(t
         def now(cls, tz=None):
             return cls(2026, 7, 9, cls.current_hour, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", MutableDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", MutableDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 9)
@@ -433,7 +433,7 @@ def test_first_goals_submission_after_deadline_is_still_late(tmp_path, monkeypat
         def now(cls, tz=None):
             return cls(2026, 7, 9, 11, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     with service.db.connect() as conn:

@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from app.db import Database
-from app.service import AccountabilityService
-from app.telegram_client import TelegramClient
-from app.telegram_updates import bot_was_added_to_chat
+from app.repositories.db import Database
+from app.services.accountability import AccountabilityService
+from app.bot.telegram.telegram_client import TelegramClient
+from app.bot.telegram.telegram_updates import bot_was_added_to_chat
 
 
 def make_service(tmp_path):

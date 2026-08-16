@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.domain import assess_day_result, monthly_leaderboard
+from app.logic.rules import assess_day_result, monthly_leaderboard
 
 
 def test_done_two_or_three_passes():

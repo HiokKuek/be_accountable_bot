@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app.domain import assess_day_result
+from app.logic.rules import assess_day_result
 
 SGT = ZoneInfo("Asia/Singapore")
 

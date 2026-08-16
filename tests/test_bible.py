@@ -1,8 +1,8 @@
 import httpx
 import pytest
 
-from app.bible import DEFAULT_BIBLE_VERSE_API_URL, BibleVerseApiClient, BibleVerseUnavailable
-from app.settings import Settings
+from app.core.settings import Settings
+from app.clients.bible import DEFAULT_BIBLE_VERSE_API_URL, BibleVerseApiClient, BibleVerseUnavailable
 
 
 def test_default_bible_verse_api_url_uses_random_verse_endpoint():

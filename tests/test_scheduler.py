@@ -1,6 +1,6 @@
-from app.db import Database
-from app.scheduler import build_scheduler
-from app.service import AccountabilityService
+from app.jobs.scheduler import build_scheduler
+from app.repositories.db import Database
+from app.services.accountability import AccountabilityService
 
 
 class FakeTelegram:

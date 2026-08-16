@@ -4,16 +4,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
-from app.angry import AngryGifClient
-from app.bible import BibleVerseApiClient
-from app.db import Database
-from app.scheduler import build_scheduler
-from app.service import AccountabilityService, AnimationReply
-from app.parsing import parse_goals
-from app.qotd import QotdApiClient
-from app.settings import Settings
-from app.telegram_client import TelegramClient
-from app.telegram_updates import bot_was_added_to_chat
+from app.clients.angry import AngryGifClient
+from app.clients.bible import BibleVerseApiClient
+from app.repositories.db import Database
+from app.jobs.scheduler import build_scheduler
+from app.services.accountability import AccountabilityService, AnimationReply
+from app.bot.handlers.parsing import parse_goals
+from app.clients.qotd import QotdApiClient
+from app.core.settings import Settings
+from app.bot.telegram.telegram_client import TelegramClient
+from app.bot.telegram.telegram_updates import bot_was_added_to_chat
 
 settings = Settings()
 db = Database(settings.database_path)
