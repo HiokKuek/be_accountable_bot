@@ -4,8 +4,6 @@ import random
 from typing import Protocol
 
 
-# These are original, unattributed reflections written for this bot. They are
-# intentionally not presented as quotations from the Buddha, sutras, or teachers.
 ORIGINAL_REFLECTIONS: dict[str, tuple[str, ...]] = {
     "mindfulness": (
         "Return to this breath; it is the only task asking for you now.",
@@ -41,12 +39,11 @@ ORIGINAL_REFLECTIONS: dict[str, tuple[str, ...]] = {
 
 
 class BuddhaQuoteUnavailable(RuntimeError):
-    """Raised when the local reflection bank cannot provide a usable line."""
+    pass
 
 
 class BuddhaQuoteClient(Protocol):
     def random_quote(self) -> tuple[str, str]:
-        """Return an original reflection and its category."""
         ...
 
 

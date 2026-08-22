@@ -20,12 +20,11 @@ class CachedQotd:
 
 
 class QotdUnavailable(RuntimeError):
-    """Raised when the quote API cannot provide a usable quote."""
+    pass
 
 
 class QotdClient(Protocol):
     def quote_of_the_day(self) -> tuple[str, str | None]:
-        """Return a quote and optional author from an external service."""
         ...
 
 
@@ -53,7 +52,7 @@ class QotdApiClient:
             response = self.http_client.get(self.api_url)
             response.raise_for_status()
             payload = response.json()
-        except Exception as exc:  # httpx and JSON decoding failures
+        except Exception as exc:
             raise QotdUnavailable("quote API request failed") from exc
 
         quote, author = self._parse_zenquotes_payload(payload)

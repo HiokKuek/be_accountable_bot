@@ -2,34 +2,31 @@ from pathlib import Path
 
 import pytest
 
-from app.db import Database
-from app.service import AccountabilityService
-from app.telegram_client import TelegramClient
-from app.telegram_updates import bot_was_added_to_chat
+from app.handlers.telegram.response_mapper import TelegramClient
+from app.handlers.telegram.update_parser import bot_was_added_to_chat
+from tests.conftest import build_env
 
 
-def make_service(tmp_path):
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    return AccountabilityService(db)
+def make_env(tmp_path):
+    return build_env(tmp_path / "test.sqlite3")
 
 
 def test_user_facing_text_does_not_show_markdown_heading_markers(tmp_path):
-    service = make_service(tmp_path)
-    service.db.register_user(1, "ernest", "Ernest", chat_id=100)
+    env = make_env(tmp_path)
+    env.repositories.participants.register_user(1, "ernest", "Ernest", chat_id=100)
     messages = [
-        service.help_text(),
-        service.rules_text(),
-        service.morning_reminder(),
-        service.today_summary(service.today(), chat_id=100),
-        service.month_score(chat_id=100),
+        env.accountability.help_text(),
+        env.accountability.rules_text(),
+        env.reminders.morning_reminder(),
+        env.summaries.today_summary(env.accountability.today(), chat_id=100),
+        env.summaries.month_score(chat_id=100),
     ]
     assert all("##" not in message for message in messages)
 
 
 def test_intro_text_explains_how_to_start(tmp_path):
-    service = make_service(tmp_path)
-    intro = service.intro_text()
+    env = make_env(tmp_path)
+    intro = env.accountability.intro_text()
     assert "Accountability Bot" in intro
     assert "group" in intro.lower()
     assert "group" in intro
@@ -40,8 +37,8 @@ def test_intro_text_explains_how_to_start(tmp_path):
 
 
 def test_private_chat_intro_explains_bot_requires_group(tmp_path):
-    service = make_service(tmp_path)
-    intro = service.private_chat_text()
+    env = make_env(tmp_path)
+    intro = env.accountability.private_chat_text()
 
     assert "can't run in a private chat" in intro.lower()
     assert "group" in intro.lower()
@@ -67,12 +64,12 @@ def test_command_menu_payload_lists_core_commands():
 
 
 def test_hidden_buddha_command_does_not_leak_into_discovery_surfaces(tmp_path):
-    service = make_service(tmp_path)
+    env = make_env(tmp_path)
     discovery_surfaces = [
         (Path(__file__).parents[1] / "README.md").read_text(),
-        service.intro_text(),
-        service.help_text(),
-        service.rules_text(),
+        env.accountability.intro_text(),
+        env.accountability.help_text(),
+        env.accountability.rules_text(),
         repr(TelegramClient.command_menu()),
     ]
 
@@ -80,13 +77,13 @@ def test_hidden_buddha_command_does_not_leak_into_discovery_surfaces(tmp_path):
 
 
 def test_hidden_angry_command_does_not_leak_into_discovery_surfaces(tmp_path):
-    service = make_service(tmp_path)
+    env = make_env(tmp_path)
     discovery_surfaces = [
         (Path(__file__).parents[1] / "README.md").read_text(),
-        service.intro_text(),
-        service.help_text(),
-        service.rules_text(),
-        service.private_chat_text(),
+        env.accountability.intro_text(),
+        env.accountability.help_text(),
+        env.accountability.rules_text(),
+        env.accountability.private_chat_text(),
         repr(TelegramClient.command_menu()),
     ]
 

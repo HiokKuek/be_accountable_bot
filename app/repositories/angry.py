@@ -34,7 +34,6 @@ LOCAL_ANGRY_REACTIONS = (
 
 class AngryGifProvider(Protocol):
     def random_reaction(self) -> AngryReaction:
-        """Return an angry reaction GIF and caption."""
         ...
 
 

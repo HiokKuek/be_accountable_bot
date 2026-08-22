@@ -1,19 +1,153 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from app.angry import AngryReaction
-from app.bible import BibleVerseUnavailable
-from app.buddha import BuddhaQuoteUnavailable
-from app.db import Database
-from app.service import AccountabilityService, AnimationReply
+from app.domain.models import MessageContext, ReportDoneInput, SubmitGoalsInput
+from app.handlers.telegram.update_parser import parse_done_count, parse_goals
+from app.repositories.angry import AngryReaction
+from app.repositories.bible import BibleVerseUnavailable
+from app.repositories.buddha import BuddhaQuoteUnavailable
+from app.services.content import AnimationReply
+from tests.conftest import build_env
 
 SGT = ZoneInfo("Asia/Singapore")
 
 
+class ServiceBundle:
+    def __init__(self, env):
+        self.env = env
+        self.db = RepositoryProxy(env.repositories)
+        self.accountability = env.accountability
+        self.summaries = env.summaries
+        self.reminders = env.reminders
+        self.content = env.content
+
+    def today(self):
+        return self.accountability.today()
+
+    def today_summary(self, *args, **kwargs):
+        return self.summaries.today_summary(*args, **kwargs)
+
+    def month_score(self, *args, **kwargs):
+        return self.summaries.month_score(*args, **kwargs)
+
+    def goal_confirmation_summary(self, *args, **kwargs):
+        return self.summaries.goal_confirmation_summary(*args, **kwargs)
+
+    def goal_deadline_summary(self, *args, **kwargs):
+        return self.summaries.goal_deadline_summary(*args, **kwargs)
+
+    def morning_reminder(self, *args, **kwargs):
+        return self.reminders.morning_reminder(*args, **kwargs)
+
+    def missing_goals_reminder(self, *args, **kwargs):
+        return self.reminders.missing_goals_reminder(*args, **kwargs)
+
+    def completion_reminder(self, *args, **kwargs):
+        return self.reminders.completion_reminder(*args, **kwargs)
+
+    def qotd(self):
+        return self.content.qotd()
+
+    def intro_text(self):
+        return self.accountability.intro_text()
+
+    def private_chat_text(self):
+        return self.accountability.private_chat_text()
+
+    def help_text(self):
+        return self.accountability.help_text()
+
+    def rules_text(self):
+        return self.accountability.rules_text()
+
+    def goal_submission_is_next_day_draft(self, *args, **kwargs):
+        return self.accountability.goal_submission_is_next_day_draft(*args, **kwargs)
+
+    def handle_text(self, *args, **kwargs):
+        return send(self, *args, **kwargs)
+
+
+class RepositoryProxy:
+    def __init__(self, repositories):
+        self.repositories = repositories
+        self.schema = repositories.schema
+        self.participants = repositories.participants
+        self.checkins = repositories.checkins
+        self.notifications = repositories.notifications
+
+    def connect(self):
+        return self.schema.connect()
+
+    def init(self):
+        return self.schema.init()
+
+    def __getattr__(self, name: str):
+        for repository in (
+            self.repositories.schema,
+            self.repositories.participants,
+            self.repositories.checkins,
+            self.repositories.notifications,
+        ):
+            if hasattr(repository, name):
+                return getattr(repository, name)
+        raise AttributeError(name)
+
+
 def make_service(tmp_path):
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    return AccountabilityService(db)
+    return ServiceBundle(build_env(tmp_path / "test.sqlite3"))
+
+
+def make_context(user_id, username, display_name, chat_id, *, chat_type=None):
+    return MessageContext(
+        user_id=user_id,
+        username=username,
+        display_name=display_name,
+        chat_id=chat_id,
+        chat_type=chat_type,
+    )
+
+
+def send(service, user_id, username, display_name, chat_id, text, *, chat_type=None):
+    context = make_context(user_id, username, display_name, chat_id, chat_type=chat_type)
+    if chat_type == "private":
+        return service.accountability.private_chat_text()
+    service.db.participants.register_chat(chat_id)
+    command = text.strip().split(maxsplit=1)[0].lower().split("@", maxsplit=1)[0]
+    if command == "/register":
+        return service.accountability.register_participant(context)
+    if command == "/rules":
+        return service.accountability.rules_text()
+    if command == "/help":
+        return service.accountability.help_text()
+    if command == "/amen":
+        return service.accountability.amen()
+    if command == "/buddha":
+        return service.accountability.buddha()
+    if command == "/angry":
+        return service.accountability.angry()
+    if not service.db.participants.is_registered(user_id, chat_id=chat_id):
+        return service.accountability.registration_required()
+    if command == "/remove":
+        parts = text.strip().split(maxsplit=1)
+        argument = parts[1] if len(parts) > 1 else None
+        return service.accountability.remove_participant(context, argument)
+    goals = parse_goals(text)
+    if goals is not None:
+        return service.accountability.submit_goals(SubmitGoalsInput(context=context, goals=goals))
+    if command == "/goals":
+        return service.accountability.goals_usage_text()
+    if command == "/confirmgoals":
+        return service.accountability.confirm_goals(context)
+    if command == "/done":
+        count = parse_done_count(text)
+        return service.accountability.report_done(
+            None if count is None else ReportDoneInput(context=context, completed_count=count)
+        )
+    if command == "/today":
+        return service.summaries.today_summary(service.accountability.current_checkin_date(), chat_id=chat_id)
+    if command in {"/score", "/summary"}:
+        return service.summaries.month_score(chat_id=chat_id)
+    return None
 
 
 class FakeQotdClient:
@@ -67,9 +201,7 @@ class FakeAngryGifClient:
 
 def test_angry_returns_escaped_animation_before_registration(tmp_path):
     angry_client = FakeAngryGifClient()
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, angry_gif_client=angry_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", angry_gif_client=angry_client))
 
     response = service.handle_text(1, "ernest", "Ernest", 100, "/angry")
 
@@ -82,9 +214,7 @@ def test_angry_returns_escaped_animation_before_registration(tmp_path):
 
 def test_angry_supports_telegram_bot_mention_before_registration(tmp_path):
     angry_client = FakeAngryGifClient()
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, angry_gif_client=angry_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", angry_gif_client=angry_client))
 
     response = service.handle_text(1, None, "Ernest", 100, "/angry@be_accountable_bot")
 
@@ -95,9 +225,7 @@ def test_angry_supports_telegram_bot_mention_before_registration(tmp_path):
 
 def test_angry_keeps_private_chat_behavior_unchanged(tmp_path):
     angry_client = FakeAngryGifClient()
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, angry_gif_client=angry_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", angry_gif_client=angry_client))
 
     response = service.handle_text(
         1, "ernest", "Ernest", 100, "/angry", chat_type="private"
@@ -109,9 +237,7 @@ def test_angry_keeps_private_chat_behavior_unchanged(tmp_path):
 
 def test_amen_returns_escaped_api_verse_without_registration(tmp_path):
     bible_client = FakeBibleVerseClient("Love <God> & others.", "1 John 4:7 & 8")
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, bible_verse_client=bible_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", bible_verse_client=bible_client))
 
     response = service.handle_text(1, "ernest", "Ernest", 100, "/amen")
 
@@ -126,9 +252,7 @@ def test_amen_returns_escaped_api_verse_without_registration(tmp_path):
 
 def test_amen_supports_telegram_bot_mention(tmp_path):
     bible_client = FakeBibleVerseClient()
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, bible_verse_client=bible_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", bible_verse_client=bible_client))
 
     response = service.handle_text(1, None, "Ernest", 100, "/amen@be_accountable_bot")
 
@@ -138,9 +262,7 @@ def test_amen_supports_telegram_bot_mention(tmp_path):
 
 def test_amen_handles_api_failure_gracefully(tmp_path):
     bible_client = FakeBibleVerseClient(error=True)
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, bible_verse_client=bible_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", bible_verse_client=bible_client))
 
     response = service.handle_text(1, None, "Ernest", 100, "/amen")
 
@@ -149,9 +271,7 @@ def test_amen_handles_api_failure_gracefully(tmp_path):
 
 def test_buddha_returns_escaped_original_reflection_without_registration(tmp_path):
     buddha_client = FakeBuddhaQuoteClient("Release <yesterday> & rest.", "letting go")
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", buddha_quote_client=buddha_client))
 
     response = service.handle_text(1, "ernest", "Ernest", 100, "/buddha")
 
@@ -166,9 +286,7 @@ def test_buddha_returns_escaped_original_reflection_without_registration(tmp_pat
 
 def test_buddha_supports_telegram_bot_mention(tmp_path):
     buddha_client = FakeBuddhaQuoteClient()
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", buddha_quote_client=buddha_client))
 
     response = service.handle_text(1, None, "Ernest", 100, "/buddha@be_accountable_bot")
 
@@ -178,9 +296,7 @@ def test_buddha_supports_telegram_bot_mention(tmp_path):
 
 def test_buddha_handles_local_quote_failure_gracefully(tmp_path):
     buddha_client = FakeBuddhaQuoteClient(error=True)
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, buddha_quote_client=buddha_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", buddha_quote_client=buddha_client))
 
     response = service.handle_text(1, None, "Ernest", 100, "/buddha")
 
@@ -255,7 +371,7 @@ def test_goals_after_done_three_draft_tomorrow_and_can_be_overwritten(tmp_path, 
         def now(cls, tz=None):
             return cls(2026, 7, 9, 21, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     today = date(2026, 7, 9)
@@ -279,7 +395,7 @@ def test_confirmgoals_promotes_todays_draft(tmp_path, monkeypatch):
         def now(cls, tz=None):
             return cls(2026, 7, 10, 8, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 10)
@@ -298,7 +414,7 @@ def test_fresh_goals_on_drafted_day_are_official_and_supersede_draft(tmp_path, m
         def now(cls, tz=None):
             return cls(2026, 7, 10, 8, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 10)
@@ -377,7 +493,7 @@ def test_after_deadline_registration_grace_accepts_same_day_goals_without_late_f
         def now(cls, tz=None):
             return cls(2026, 7, 9, 10, 30, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     day = date(2026, 7, 9)
     service.db.register_user(1, "late", "Late Joiner", chat_id=100)
@@ -406,7 +522,7 @@ def test_after_deadline_goals_edit_preserves_on_time_status_in_today_and_score(t
         def now(cls, tz=None):
             return cls(2026, 7, 9, cls.current_hour, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", MutableDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", MutableDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     day = date(2026, 7, 9)
@@ -433,7 +549,7 @@ def test_first_goals_submission_after_deadline_is_still_late(tmp_path, monkeypat
         def now(cls, tz=None):
             return cls(2026, 7, 9, 11, 0, tzinfo=tz)
 
-    monkeypatch.setattr("app.service.datetime", FrozenDateTime)
+    monkeypatch.setattr("app.services.accountability.datetime", FrozenDateTime)
     service = make_service(tmp_path)
     service.db.register_user(1, "ernest", "Ernest", chat_id=100)
     with service.db.connect() as conn:
@@ -515,9 +631,7 @@ def test_goal_reminders_distinguish_drafts_from_users_with_no_goals(tmp_path):
 
 def test_goal_confirmation_summary_thanks_users_shows_goals_and_api_qotd(tmp_path):
     qotd_client = FakeQotdClient("Consistency beats intensity", "Internet Quote API")
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, qotd_client=qotd_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", qotd_client=qotd_client))
     day = date(2026, 7, 9)
     service.db.register_user(1, "cyril", "cyril", chat_id=100)
     service.db.register_user(2, "ernest", "Ernest", chat_id=100)
@@ -540,9 +654,7 @@ def test_goal_confirmation_summary_thanks_users_shows_goals_and_api_qotd(tmp_pat
 
 def test_qotd_escapes_api_response_html(tmp_path):
     qotd_client = FakeQotdClient("<ship> daily", "A&B")
-    db = Database(tmp_path / "test.sqlite3")
-    db.init()
-    service = AccountabilityService(db, qotd_client=qotd_client)
+    service = ServiceBundle(build_env(tmp_path / "test.sqlite3", qotd_client=qotd_client))
 
     response = service.qotd()
 
