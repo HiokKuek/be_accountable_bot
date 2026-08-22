@@ -1,10 +1,10 @@
-from app.clients.angry import (
+from app.repositories.angry import (
     LOCAL_ANGRY_REACTIONS,
     TENOR_SEARCH_URL,
     AngryGifClient,
     AngryReaction,
 )
-from app.core.settings import Settings
+from app.config import Settings
 
 
 class FakeResponse:

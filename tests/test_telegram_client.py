@@ -1,7 +1,7 @@
 import asyncio
 
-from app.bot.telegram import telegram_client
-from app.bot.telegram.telegram_client import TelegramClient
+from app.handlers.telegram import response_mapper
+from app.handlers.telegram.response_mapper import TelegramClient
 
 
 class FakeResponse:
@@ -53,7 +53,7 @@ class FakeAsyncClient:
 
 def test_send_message_returns_message_id(monkeypatch):
     FakeSyncClient.requests = []
-    monkeypatch.setattr(telegram_client.httpx, "Client", FakeSyncClient)
+    monkeypatch.setattr(response_mapper.httpx, "Client", FakeSyncClient)
     client = TelegramClient("TOKEN")
 
     message_id = client.send_message_sync(100, "hello")
@@ -63,7 +63,7 @@ def test_send_message_returns_message_id(monkeypatch):
 
 def test_pin_chat_message_posts_to_telegram_api(monkeypatch):
     FakeSyncClient.requests = []
-    monkeypatch.setattr(telegram_client.httpx, "Client", FakeSyncClient)
+    monkeypatch.setattr(response_mapper.httpx, "Client", FakeSyncClient)
     client = TelegramClient("TOKEN")
 
     assert client.pin_chat_message_sync(100, 123) is True
@@ -76,7 +76,7 @@ def test_pin_chat_message_posts_to_telegram_api(monkeypatch):
 
 def test_send_animation_posts_media_without_caption_by_default(monkeypatch):
     FakeAsyncClient.requests = []
-    monkeypatch.setattr(telegram_client.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(response_mapper.httpx, "AsyncClient", FakeAsyncClient)
     client = TelegramClient("TOKEN")
 
     message_id = asyncio.run(client.send_animation(100, "https://example.com/angry.gif"))
@@ -95,7 +95,7 @@ def test_send_animation_posts_media_without_caption_by_default(monkeypatch):
 
 def test_send_animation_includes_caption_when_provided(monkeypatch):
     FakeAsyncClient.requests = []
-    monkeypatch.setattr(telegram_client.httpx, "AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr(response_mapper.httpx, "AsyncClient", FakeAsyncClient)
     client = TelegramClient("TOKEN")
 
     message_id = asyncio.run(

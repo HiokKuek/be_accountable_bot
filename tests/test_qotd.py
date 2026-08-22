@@ -3,8 +3,8 @@ from datetime import date
 import httpx
 import pytest
 
-from app.core.settings import Settings
-from app.clients.qotd import DEFAULT_QOTD_API_URL, QotdApiClient, QotdUnavailable
+from app.config import Settings
+from app.repositories.qotd import DEFAULT_QOTD_API_URL, QotdApiClient, QotdUnavailable
 
 
 def test_default_qotd_api_url_uses_daily_quote_endpoint():
