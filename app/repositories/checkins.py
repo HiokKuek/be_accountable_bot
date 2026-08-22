@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 
-from app.logic.rules import assess_day_result
-from app.repositories.core.base import SGT, SQLiteRepository
+from app.domain.rules import assess_day_result
+from app.repositories.core.db import SGT, SQLiteRepository
 
 
 class CheckinRepository(SQLiteRepository):

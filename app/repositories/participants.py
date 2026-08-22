@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from app.repositories.core.base import SGT, SQLiteRepository
+from app.repositories.core.db import SGT, SQLiteRepository
 
 
 class ParticipantRepository(SQLiteRepository):

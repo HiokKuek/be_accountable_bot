@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from app.repositories.core.base import SGT, SQLiteRepository
+from app.repositories.core.db import SGT, SQLiteRepository
 
 
 class SchemaRepository(SQLiteRepository):

@@ -1,69 +1,57 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import sqlite3
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
-
-from app.repositories.checkins import CheckinRepository
-from app.repositories.notifications import NotificationRepository
-from app.repositories.participants import ParticipantRepository
-from app.repositories.core.schema import SchemaRepository
+from zoneinfo import ZoneInfo
 
 
-@dataclass(frozen=True)
-class Repositories:
-    schema: SchemaRepository
-    participants: ParticipantRepository
-    checkins: CheckinRepository
-    notifications: NotificationRepository
+SGT = ZoneInfo("Asia/Singapore")
 
 
-def build_repositories(path: str | Path) -> Repositories:
-    return Repositories(
-        schema=SchemaRepository(path),
-        participants=ParticipantRepository(path),
-        checkins=CheckinRepository(path),
-        notifications=NotificationRepository(path),
-    )
-
-
-class Database:
+class SQLiteRepository:
     def __init__(self, path: str | Path):
-        self.repositories = build_repositories(path)
-        self.schema = self.repositories.schema
-        self.participants = self.repositories.participants
-        self.checkins = self.repositories.checkins
-        self.notifications = self.repositories.notifications
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    @classmethod
-    def from_repositories(
-        cls,
-        *,
-        schema: SchemaRepository,
-        participants: ParticipantRepository,
-        checkins: CheckinRepository,
-        notifications: NotificationRepository,
-    ) -> "Database":
-        database = cls.__new__(cls)
-        database.repositories = Repositories(
-            schema=schema,
-            participants=participants,
-            checkins=checkins,
-            notifications=notifications,
-        )
-        database.schema = schema
-        database.participants = participants
-        database.checkins = checkins
-        database.notifications = notifications
-        return database
+    def connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
-    def connect(self):
-        return self.schema.connect()
+    @staticmethod
+    def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table_name,)).fetchone()
+        return row is not None
 
-    def init(self) -> None:
-        self.schema.init()
+    @staticmethod
+    def _has_group_scoped_checkins_index(conn: sqlite3.Connection) -> bool:
+        for index in conn.execute("PRAGMA index_list(checkins)").fetchall():
+            if not index["unique"]:
+                continue
+            columns = [row["name"] for row in conn.execute(f"PRAGMA index_info({index['name']})").fetchall()]
+            if columns == ["checkin_date", "chat_id", "telegram_user_id"]:
+                return True
+        return False
 
-    def __getattr__(self, name: str):
-        for repository in (self.schema, self.participants, self.checkins, self.notifications):
-            if hasattr(repository, name):
-                return getattr(repository, name)
-        raise AttributeError(name)
+    def _default_chat_id_for_migration(self, conn: sqlite3.Connection) -> int:
+        row = conn.execute("SELECT chat_id FROM chats ORDER BY created_at DESC LIMIT 1").fetchone()
+        if row:
+            return int(row["chat_id"])
+        now = datetime.now(SGT).isoformat(timespec="seconds")
+        conn.execute("INSERT OR IGNORE INTO chats(chat_id, title, created_at) VALUES (?, ?, ?)", (0, "Migrated default chat", now))
+        return 0
+
+    @staticmethod
+    def _goal_deadline_bounds(checkin_date: date) -> tuple[str, str]:
+        deadline = datetime.combine(checkin_date, time(10, 0), tzinfo=SGT)
+        next_day = datetime.combine(checkin_date + timedelta(days=1), time(0, 0), tzinfo=SGT)
+        return deadline.isoformat(timespec="seconds"), next_day.isoformat(timespec="seconds")
+
+    @staticmethod
+    def _row_to_checkin(row: sqlite3.Row) -> dict:
+        data = dict(row)
+        data["goals"] = json.loads(data.pop("goals_json")) if data.get("goals_json") else None
+        return data
