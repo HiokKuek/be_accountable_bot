@@ -143,7 +143,7 @@ def test_openrouter_client_falls_back_to_secondary_model_after_failure():
     assert [request["json"]["model"] for request in fake_http.requests] == [
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
-        "openrouter/free",
+        "nex-agi/nex-n2.5-mini:free",
     ]
 
 
@@ -157,5 +157,6 @@ def test_openrouter_client_normalizes_legacy_gemma_model_ids():
     assert client._models_to_try() == [
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
+        "nex-agi/nex-n2.5-mini:free",
         "openrouter/free",
     ]

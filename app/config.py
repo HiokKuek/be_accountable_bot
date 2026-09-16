@@ -4,7 +4,10 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.repositories.bible import DEFAULT_BIBLE_VERSE_API_URL
-from app.repositories.openrouter import DEFAULT_OPENROUTER_API_URL
+from app.repositories.openrouter import (
+    DEFAULT_OPENROUTER_API_URL,
+    DEFAULT_OPENROUTER_STABLE_FREE_MODEL,
+)
 from app.repositories.qotd import DEFAULT_QOTD_API_URL
 
 
@@ -21,7 +24,7 @@ class Settings(BaseSettings):
     bible_verse_api_url: str = DEFAULT_BIBLE_VERSE_API_URL
     tenor_api_key: str = ""
     openrouter_api_key: str = ""
-    openrouter_model: str = "openrouter/free"
+    openrouter_model: str = DEFAULT_OPENROUTER_STABLE_FREE_MODEL
     openrouter_fallback_model: str = "google/gemma-4-31b-it:free"
     openrouter_api_url: str = DEFAULT_OPENROUTER_API_URL
     summarise_buffer_size: int = 100

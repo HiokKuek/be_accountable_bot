@@ -5,6 +5,7 @@ from typing import Any, cast
 import httpx
 
 DEFAULT_OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENROUTER_STABLE_FREE_MODEL = "nex-agi/nex-n2.5-mini:free"
 DEFAULT_OPENROUTER_ROUTER_MODEL = "openrouter/free"
 LEGACY_MODEL_ALIASES = {
     "google/gemma-4-31b:free": "google/gemma-4-31b-it:free",
@@ -21,7 +22,7 @@ class OpenRouterClient:
         self,
         *,
         api_key: str = "",
-        model: str = DEFAULT_OPENROUTER_ROUTER_MODEL,
+        model: str = DEFAULT_OPENROUTER_STABLE_FREE_MODEL,
         fallback_model: str = "google/gemma-4-31b-it:free",
         api_url: str = DEFAULT_OPENROUTER_API_URL,
         site_url: str | None = None,
@@ -93,7 +94,12 @@ class OpenRouterClient:
 
     def _models_to_try(self) -> list[str]:
         models: list[str] = []
-        for candidate in (self.model, self.fallback_model, DEFAULT_OPENROUTER_ROUTER_MODEL):
+        for candidate in (
+            self.model,
+            self.fallback_model,
+            DEFAULT_OPENROUTER_STABLE_FREE_MODEL,
+            DEFAULT_OPENROUTER_ROUTER_MODEL,
+        ):
             normalized = self._normalize_model(candidate)
             if normalized and normalized not in models:
                 models.append(normalized)
