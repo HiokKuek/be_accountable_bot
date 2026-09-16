@@ -230,6 +230,7 @@ class AccountabilityService:
             "<code>/confirmgoals</code> — confirm a draft for today\n"
             "<code>/done 0</code> to <code>/done 3</code> — report completed goals\n"
             "<code>/today</code> — show today's status\n"
+            "<code>/summarise</code> — summarise the last 100 captured chat messages\n"
             "<code>/score</code> — show current month leaderboard\n"
             "<code>/remove @user</code> — remove an inactive participant\n"
             "<code>/rules</code> — show the rules\n\n"

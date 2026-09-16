@@ -46,6 +46,15 @@ def test_private_chat_intro_explains_bot_requires_group(tmp_path):
     assert "/register" in intro
 
 
+def test_help_text_mentions_summarise_command(tmp_path):
+    env = make_env(tmp_path)
+
+    help_text = env.accountability.help_text()
+
+    assert "/summarise" in help_text
+    assert "last 100 captured chat messages" in help_text
+
+
 def test_command_menu_payload_lists_core_commands():
     commands = TelegramClient.command_menu()
     assert {item["command"] for item in commands} == {
@@ -54,6 +63,7 @@ def test_command_menu_payload_lists_core_commands():
         "confirmgoals",
         "done",
         "today",
+        "summarise",
         "score",
         "remove",
         "rules",

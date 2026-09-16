@@ -20,6 +20,12 @@ class ParsedCommand:
     argument: str | None = None
 
 
+@dataclass(frozen=True)
+class ParsedTextMessage:
+    context: MessageContext
+    text: str
+
+
 def parse_done_count(text: str) -> int | None:
     match = _DONE_RE.match(text.strip())
     if not match:
@@ -59,7 +65,7 @@ def bot_was_added_to_chat(update: dict, bot_id: int | None) -> int | None:
     return None
 
 
-def parse_command(update: dict) -> ParsedCommand | None:
+def parse_text_message(update: dict) -> ParsedTextMessage | None:
     message = update.get("message") or update.get("edited_message")
     if not message:
         return None
@@ -86,9 +92,23 @@ def parse_command(update: dict) -> ParsedCommand | None:
         chat_type=chat.get("type"),
         chat_title=chat.get("title"),
     )
-    stripped = text.strip()
-    command = stripped.split(maxsplit=1)[0].lower().split("@", maxsplit=1)[0]
+    return ParsedTextMessage(context=context, text=text)
+
+
+def parse_command(update: dict) -> ParsedCommand | None:
+    parsed_text = parse_text_message(update)
+    if parsed_text is None:
+        return None
+
+    context = parsed_text.context
+    stripped = parsed_text.text.strip()
     goals = parse_goals(stripped)
+    if not stripped.startswith("/") and goals is None:
+        return None
+
+    command = stripped.split(maxsplit=1)[0].lower().split("@", maxsplit=1)[0]
+    if not command.startswith("/") and goals is not None:
+        command = "/goals"
     done_count = parse_done_count(stripped)
     argument = None
     if command == "/remove":

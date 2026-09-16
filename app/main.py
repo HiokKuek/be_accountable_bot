@@ -12,8 +12,10 @@ from app.handlers.telegram.response_mapper import TelegramClient
 from app.repositories.angry import AngryGifClient
 from app.repositories.bible import BibleVerseApiClient
 from app.repositories.core.wiring import build_repositories
+from app.repositories.openrouter import OpenRouterClient
 from app.repositories.qotd import QotdApiClient
 from app.services.accountability import AccountabilityService
+from app.services.chat_summarise import ChatMessageBuffer, ChatSummariseService
 from app.services.content import ContentService
 from app.services.reminders import ReminderService
 from app.services.summaries import SummaryService
@@ -35,6 +37,16 @@ accountability = AccountabilityService(
 summaries = SummaryService(repositories.checkins, content, penalty_amount=settings.penalty_amount)
 reminders = ReminderService(repositories.checkins, summaries)
 telegram = TelegramClient(settings.telegram_bot_token)
+chat_summarise = ChatSummariseService(
+    OpenRouterClient(
+        api_key=settings.openrouter_api_key,
+        model=settings.openrouter_model,
+        fallback_model=settings.openrouter_fallback_model,
+        api_url=settings.openrouter_api_url,
+        site_url=settings.public_base_url,
+    ),
+    ChatMessageBuffer(per_chat_limit=settings.summarise_buffer_size),
+)
 scheduler = build_scheduler(reminders, summaries, telegram, repositories.participants, repositories.notifications)
 
 
@@ -60,5 +72,6 @@ app.include_router(
         repositories.notifications,
         accountability,
         summaries,
+        chat_summarise,
     )
 )

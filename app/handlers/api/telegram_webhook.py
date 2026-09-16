@@ -4,11 +4,12 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.domain.models import ReportDoneInput, SubmitGoalsInput
 from app.handlers.telegram.response_mapper import TelegramClient, TelegramResponseMapper
-from app.handlers.telegram.update_parser import bot_was_added_to_chat, parse_command
+from app.handlers.telegram.update_parser import bot_was_added_to_chat, parse_command, parse_text_message
 from app.repositories.checkins import CheckinRepository
 from app.repositories.notifications import NotificationRepository
 from app.repositories.participants import ParticipantRepository
 from app.services.accountability import AccountabilityService
+from app.services.chat_summarise import ChatSummariseService
 from app.services.summaries import SummaryService
 from app.config import Settings
 
@@ -21,6 +22,7 @@ def build_telegram_webhook_router(
     notifications: NotificationRepository,
     accountability: AccountabilityService,
     summaries: SummaryService,
+    chat_summarise: ChatSummariseService,
 ) -> APIRouter:
     router = APIRouter()
     mapper = TelegramResponseMapper(telegram)
@@ -43,16 +45,29 @@ def build_telegram_webhook_router(
             await mapper.send_reply(int(added_chat_id), accountability.intro_text())
             return {"ok": True}
 
-        parsed = parse_command(update)
-        if parsed is None:
+        parsed_text = parse_text_message(update)
+        if parsed_text is None:
             return {"ok": True}
 
-        context = parsed.context
+        context = parsed_text.context
+        raw_text = parsed_text.text
         if context.chat_type == "private":
             await mapper.send_reply(context.chat_id, accountability.private_chat_text())
             return {"ok": True}
 
         participants.register_chat(context.chat_id, context.chat_title)
+
+        command_name = raw_text.strip().split(maxsplit=1)[0].lower().split("@", maxsplit=1)[0]
+        if command_name not in {"/summarise", "/summarize"}:
+            chat_summarise.capture_message(context, raw_text)
+
+        parsed = parse_command(update)
+        if parsed is None:
+            return {"ok": True}
+
+        had_goal_draft = parsed.name == "/confirmgoals" and checkins.get_goal_draft(
+            context.user_id, accountability.today(), chat_id=context.chat_id
+        ) is not None
 
         if parsed.name == "/register":
             response = accountability.register_participant(context)
@@ -66,6 +81,8 @@ def build_telegram_webhook_router(
             response = accountability.buddha()
         elif parsed.name == "/angry":
             response = accountability.angry()
+        elif parsed.name in {"/summarise", "/summarize"}:
+            response = await chat_summarise.summarise(context)
         elif not participants.is_registered(context.user_id, chat_id=context.chat_id):
             response = accountability.registration_required()
         elif parsed.name == "/remove":
@@ -91,12 +108,9 @@ def build_telegram_webhook_router(
 
         await mapper.send_reply(context.chat_id, response)
 
-        confirms_draft = parsed.name == "/confirmgoals" and checkins.get_goal_draft(
-            context.user_id, accountability.today(), chat_id=context.chat_id
-        ) is not None
         official_goals_command = (parsed.goals is not None and not accountability.goal_submission_is_next_day_draft(
             context.user_id, chat_id=context.chat_id
-        )) or confirms_draft
+        )) or had_goal_draft
         if official_goals_command:
             checkin_date = accountability.today()
             if checkins.all_active_users_have_goals(checkin_date, chat_id=context.chat_id) and notifications.claim_notification_once(
@@ -107,7 +121,12 @@ def build_telegram_webhook_router(
                     summaries.goal_confirmation_summary(checkin_date, chat_id=context.chat_id),
                 )
                 if message_id is not None:
-                    await telegram.pin_chat_message(context.chat_id, message_id)
+                    notifications.set_notification_message_id(
+                        "goals-keyed",
+                        checkin_date,
+                        chat_id=context.chat_id,
+                        message_id=message_id,
+                    )
         return {"ok": True}
 
     return router

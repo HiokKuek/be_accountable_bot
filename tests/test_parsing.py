@@ -1,4 +1,4 @@
-from app.handlers.telegram.update_parser import parse_done_count, parse_goals
+from app.handlers.telegram.update_parser import parse_command, parse_done_count, parse_goals
 
 
 def test_parse_done_count_accepts_zero_to_three():
@@ -53,3 +53,31 @@ def test_parse_goals_requires_exactly_three_goals():
 - two
 - three
 - four""") is None
+
+
+def test_parse_command_ignores_plain_chat_messages():
+    update = {
+        "message": {
+            "chat": {"id": -100, "type": "group", "title": "Focus Group"},
+            "from": {"id": 1, "username": "ernest", "first_name": "Ernest"},
+            "text": "hello team",
+        }
+    }
+
+    assert parse_command(update) is None
+
+
+def test_parse_command_accepts_summarise_command():
+    update = {
+        "message": {
+            "chat": {"id": -100, "type": "group", "title": "Focus Group"},
+            "from": {"id": 1, "username": "ernest", "first_name": "Ernest"},
+            "text": "/summarise",
+        }
+    }
+
+    parsed = parse_command(update)
+
+    assert parsed is not None
+    assert parsed.name == "/summarise"
+    assert parsed.context.chat_id == -100

@@ -26,6 +26,7 @@ class TelegramClient:
             {"command": "confirmgoals", "description": "Confirm today's drafted goals"},
             {"command": "done", "description": "Report completed goals: /done 0-3"},
             {"command": "today", "description": "Show today's status"},
+            {"command": "summarise", "description": "Summarise recent captured chat messages"},
             {"command": "score", "description": "Show this month's leaderboard"},
             {"command": "remove", "description": "Remove an inactive participant"},
             {"command": "rules", "description": "Show the challenge rules"},

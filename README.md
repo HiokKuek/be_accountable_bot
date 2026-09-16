@@ -16,6 +16,7 @@ Use the bot here: **[@be_accountable_bot](https://t.me/be_accountable_bot)**
 2. Participants report how many goals they completed at night.
 3. The bot tracks who passed or failed each day.
 4. `/score` shows the current month leaderboard ranked by fewest failed days.
+5. `/summarise` can summarise the last 100 chat messages the bot has captured.
 
 It is designed for a Telegram group. Any group member who wants to participate can register; people who do not register are not tracked or tagged.
 
@@ -113,7 +114,7 @@ All times are in **Singapore time**.
 | 10:00 AM | Goal deadline summary posts if anyone is still missing |
 | Before 10:00 AM | If all registered participants submit early, the goals summary posts immediately |
 | 8:00 PM | Completion reminder tagging only participants who have not reported `/done` |
-| 10:00 PM | Final completion reminder tagging only participants who have not reported `/done` |
+| 10:00 PM | Final completion reminder tagging only participants who have not reported `/done`, and pin the day's goals summary |
 | 5:00 AM next day | Completion deadline and daily close |
 
 If you do not submit goals by **10:00 AM**, the day counts as failed.
@@ -134,6 +135,7 @@ If you do not report completion by **5:00 AM the next day**, the day counts as f
 | `/done 2` | Report that you completed 2 goals | `/done 2` |
 | `/done 3` | Report that you completed all 3 goals | `/done 3` |
 | `/today` | Show today's goals and status | `/today` |
+| `/summarise` | Summarise the last 100 captured chat messages | `/summarise` |
 | `/score` | Show current month leaderboard | `/score` |
 | `/summary` | Same as `/score` | `/summary` |
 | `/remove` | Remove an inactive participant from this group | `/remove @username` |
@@ -309,7 +311,8 @@ If you message the bot directly, it will give you a friendly intro and ask you t
 - After `/done 3`, send `/goals` that evening to draft the next day's goals; use `/confirmgoals` the next morning or replace them with fresh `/goals`.
 - Complete **2/3 or 3/3** goals to pass.
 - Missing goals or missing completion report counts as a fail.
-- `/score` is a leaderboard ranked by fewest failed days.
+- `/score` shows the current month leaderboard ranked by fewest failed days.
+- `/summarise` can summarise the last 100 chat messages the bot has captured.
 
 ## Need help?
 
