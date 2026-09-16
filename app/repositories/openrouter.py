@@ -5,6 +5,7 @@ from typing import Any, cast
 import httpx
 
 DEFAULT_OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_OPENROUTER_ROUTER_MODEL = "openrouter/free"
 LEGACY_MODEL_ALIASES = {
     "google/gemma-4-31b:free": "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b:free": "google/gemma-4-26b-a4b-it:free",
@@ -20,8 +21,8 @@ class OpenRouterClient:
         self,
         *,
         api_key: str = "",
-        model: str = "google/gemma-4-31b-it:free",
-        fallback_model: str = "google/gemma-4-26b-a4b-it:free",
+        model: str = DEFAULT_OPENROUTER_ROUTER_MODEL,
+        fallback_model: str = "google/gemma-4-31b-it:free",
         api_url: str = DEFAULT_OPENROUTER_API_URL,
         site_url: str | None = None,
         app_name: str = "Mr Accountable",
@@ -90,7 +91,7 @@ class OpenRouterClient:
 
     def _models_to_try(self) -> list[str]:
         models: list[str] = []
-        for candidate in (self.model, self.fallback_model):
+        for candidate in (self.model, self.fallback_model, DEFAULT_OPENROUTER_ROUTER_MODEL):
             normalized = self._normalize_model(candidate)
             if normalized and normalized not in models:
                 models.append(normalized)
@@ -111,8 +112,12 @@ class OpenRouterClient:
                 payload = None
             if isinstance(payload, dict):
                 error = payload.get("error")
-                if isinstance(error, dict) and error.get("message"):
-                    return str(error["message"])
+                if isinstance(error, dict):
+                    metadata = error.get("metadata")
+                    if isinstance(metadata, dict) and metadata.get("raw"):
+                        return str(metadata["raw"])
+                    if error.get("message"):
+                        return str(error["message"])
                 if payload.get("message"):
                     return str(payload["message"])
             return str(exc)

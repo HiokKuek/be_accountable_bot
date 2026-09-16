@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     bible_verse_api_url: str = DEFAULT_BIBLE_VERSE_API_URL
     tenor_api_key: str = ""
     openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemma-4-31b-it:free"
-    openrouter_fallback_model: str = "google/gemma-4-26b-a4b-it:free"
+    openrouter_model: str = "openrouter/free"
+    openrouter_fallback_model: str = "google/gemma-4-31b-it:free"
     openrouter_api_url: str = DEFAULT_OPENROUTER_API_URL
     summarise_buffer_size: int = 100
 

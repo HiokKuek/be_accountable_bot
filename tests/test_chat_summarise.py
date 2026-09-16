@@ -102,6 +102,7 @@ def test_openrouter_client_falls_back_to_secondary_model_after_failure():
     fake_http = FakeAsyncHttpClient(
         [
             FakeResponse({"error": {"message": "rate limited"}}, status_code=429),
+            FakeResponse({"error": {"message": "provider returned error"}}, status_code=429),
             FakeResponse({"choices": [{"message": {"content": "Fallback summary"}}]}),
         ]
     )
@@ -118,6 +119,7 @@ def test_openrouter_client_falls_back_to_secondary_model_after_failure():
     assert [request["json"]["model"] for request in fake_http.requests] == [
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
+        "openrouter/free",
     ]
 
 
@@ -131,4 +133,5 @@ def test_openrouter_client_normalizes_legacy_gemma_model_ids():
     assert client._models_to_try() == [
         "google/gemma-4-31b-it:free",
         "google/gemma-4-26b-a4b-it:free",
+        "openrouter/free",
     ]
