@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.bible import DEFAULT_BIBLE_VERSE_API_URL
-from app.qotd import DEFAULT_QOTD_API_URL
+from app.repositories.bible import DEFAULT_BIBLE_VERSE_API_URL
+from app.repositories.qotd import DEFAULT_QOTD_API_URL
 
 
 class Settings(BaseSettings):

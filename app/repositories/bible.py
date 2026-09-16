@@ -9,12 +9,11 @@ DEFAULT_BIBLE_VERSE_API_URL = "https://bible-api.com/?random=verse"
 
 
 class BibleVerseUnavailable(RuntimeError):
-    """Raised when the Bible API cannot provide a usable verse."""
+    pass
 
 
 class BibleVerseClient(Protocol):
     def random_verse(self) -> tuple[str, str]:
-        """Return verse text and its reference from an external service."""
         ...
 
 
@@ -35,7 +34,7 @@ class BibleVerseApiClient:
             response = self.http_client.get(self.api_url)
             response.raise_for_status()
             payload = response.json()
-        except Exception as exc:  # httpx and JSON decoding failures
+        except Exception as exc:
             raise BibleVerseUnavailable("Bible verse API request failed") from exc
 
         return self._parse_payload(payload)

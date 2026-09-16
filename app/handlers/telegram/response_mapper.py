@@ -4,6 +4,8 @@ import logging
 
 import httpx
 
+from app.services.content import AnimationReply
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,18 +84,12 @@ class TelegramClient:
     async def send_animation(self, chat_id: int, animation: str, caption: str | None = None) -> int | None:
         if not self.enabled():
             return None
-        payload = {
-            "chat_id": chat_id,
-            "animation": animation,
-        }
+        payload = {"chat_id": chat_id, "animation": animation}
         if caption:
             payload["caption"] = caption
             payload["parse_mode"] = "HTML"
         async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.post(
-                f"{self.base_url}/sendAnimation",
-                json=payload,
-            )
+            response = await client.post(f"{self.base_url}/sendAnimation", json=payload)
             response.raise_for_status()
             payload = response.json()
         result = payload.get("result") or {}
@@ -156,3 +152,20 @@ class TelegramClient:
         except Exception:
             logger.exception("Failed to pin Telegram message")
             return False
+
+
+class TelegramResponseMapper:
+    def __init__(self, telegram: TelegramClient):
+        self.telegram = telegram
+
+    async def send_reply(self, chat_id: int, response: str | AnimationReply | None) -> int | None:
+        if isinstance(response, AnimationReply):
+            return await self.telegram.send_animation(chat_id, response.animation, response.caption)
+        if response:
+            return await self.telegram.send_message(chat_id, response)
+        return None
+
+    def send_reply_sync(self, chat_id: int, response: str | None) -> int | None:
+        if response:
+            return self.telegram.send_message_sync(chat_id, response)
+        return None
