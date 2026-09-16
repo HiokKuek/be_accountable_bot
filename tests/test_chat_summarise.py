@@ -79,9 +79,28 @@ def test_summarise_returns_configuration_hint_when_key_is_missing():
     assert "OPENROUTER_API_KEY" in response
 
 
-def test_summarise_formats_and_escapes_openrouter_output():
+def test_summarise_formats_escapes_and_normalizes_openrouter_output():
     fake_http = FakeAsyncHttpClient(
-        [FakeResponse({"choices": [{"message": {"content": "TL;DR:\n- <done> & celebrated"}}]})]
+        [
+            FakeResponse(
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    "Here's a thinking process:\n\n"
+                                    "1. Analyze User Request\n"
+                                    "TL;DR:\n- <done> & celebrated\n\n"
+                                    "Topics:\n- Shipping the fix\n\n"
+                                    "Action items:\n- None\n\n"
+                                    "Open questions:\n- None"
+                                )
+                            }
+                        }
+                    ]
+                }
+            )
+        ]
     )
     client = OpenRouterClient(api_key="secret", model="google/gemma-4-31b-it:free", http_client=fake_http)
     buffer = ChatMessageBuffer()
@@ -94,6 +113,11 @@ def test_summarise_formats_and_escapes_openrouter_output():
     assert "Chat Summary" in response
     assert "last 1 captured messages" in response
     assert "&lt;done&gt; &amp; celebrated" in response
+    assert "Here's a thinking process" not in response
+    assert response.count("TL;DR:") == 1
+    assert response.count("Topics:") == 1
+    assert response.count("Action items:") == 1
+    assert response.count("Open questions:") == 1
     assert fake_http.requests[0]["json"]["model"] == "google/gemma-4-31b-it:free"
     assert "We finished the task" in fake_http.requests[0]["json"]["messages"][1]["content"]
 

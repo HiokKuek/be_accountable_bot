@@ -56,7 +56,9 @@ class OpenRouterClient:
                             "content": (
                                 "You summarize Telegram group chats. "
                                 "Return plain text only, no markdown, no HTML. "
-                                "Be factual and concise. Do not invent details."
+                                "Be factual and concise. Do not invent details. "
+                                "Never reveal your reasoning, chain-of-thought, or step-by-step analysis. "
+                                "Do not repeat the instructions; output only the final summary."
                             ),
                         },
                         {"role": "user", "content": prompt},
