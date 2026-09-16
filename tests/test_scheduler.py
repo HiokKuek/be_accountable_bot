@@ -6,10 +6,15 @@ from app.service import AccountabilityService
 class FakeTelegram:
     def __init__(self):
         self.sent = []
+        self.pinned = []
 
     def send_message_sync(self, chat_id: int, text: str) -> int:
         self.sent.append((chat_id, text))
         return 1000 + len(self.sent)
+
+    def pin_chat_message_sync(self, chat_id: int, message_id: int) -> bool:
+        self.pinned.append((chat_id, message_id))
+        return True
 
 
 def make_service(tmp_path):
@@ -27,12 +32,13 @@ def mark_registered_before_deadline(service, day, chat_id, *user_ids):
             )
 
 
-def test_scheduler_has_8pm_and_10pm_completion_reminders(tmp_path):
+def test_scheduler_has_goal_summary_pin_job_and_completion_reminders(tmp_path):
     service = make_service(tmp_path)
     scheduler = build_scheduler(service, FakeTelegram())
 
     job_ids = {job.id for job in scheduler.get_jobs()}
 
+    assert "goal-summary-pin" in job_ids
     assert "completion-reminder-20" in job_ids
     assert "completion-reminder-22" in job_ids
 
@@ -91,6 +97,42 @@ def test_goal_deadline_summary_sends_when_some_users_are_missing(tmp_path):
     assert len(telegram.sent) == 1
     assert "Goal deadline reached" in telegram.sent[0][1]
     assert "@ernest" in telegram.sent[0][1]
+
+
+def test_goal_summary_pin_job_pins_deadline_summary_at_10pm(tmp_path):
+    service = make_service(tmp_path)
+    telegram = FakeTelegram()
+    day = service.today()
+    service.db.register_user(1, "cyril", "cyril", chat_id=-100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=-100)
+    mark_registered_before_deadline(service, day, -100, 1, 2)
+    service.db.upsert_goals(1, day, ["a", "b", "c"], late=False, chat_id=-100)
+    scheduler = build_scheduler(service, telegram)
+
+    scheduler.get_job("goal-deadline-summary").func()
+    scheduler.get_job("goal-summary-pin").func()
+
+    assert telegram.pinned == [(-100, 1001)]
+    events = service.db.notification_events_for_day(day, chat_id=-100)
+    assert ("goal-summary-pin", "sent", 1001) in [
+        (event["kind"], event["status"], event["message_id"]) for event in events
+    ]
+
+
+def test_goal_summary_pin_job_pins_early_all_goals_summary_at_10pm(tmp_path):
+    service = make_service(tmp_path)
+    telegram = FakeTelegram()
+    day = service.today()
+    service.db.register_user(1, "cyril", "cyril", chat_id=-100)
+    service.db.register_user(2, "ernest", "Ernest", chat_id=-100)
+    mark_registered_before_deadline(service, day, -100, 1, 2)
+    service.db.claim_notification_once("goals-keyed", day, chat_id=-100)
+    service.db.set_notification_message_id("goals-keyed", day, chat_id=-100, message_id=4242)
+    scheduler = build_scheduler(service, telegram)
+
+    scheduler.get_job("goal-summary-pin").func()
+
+    assert telegram.pinned == [(-100, 4242)]
 
 
 def test_scheduler_logs_failed_notification_attempts_and_continues(tmp_path):

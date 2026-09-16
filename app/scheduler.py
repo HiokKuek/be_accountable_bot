@@ -42,6 +42,37 @@ def build_scheduler(service: AccountabilityService, telegram: TelegramClient) ->
                     error=str(exc),
                 )
 
+    def pin_goal_summary_for_all_active_chats() -> None:
+        notification_date = datetime.now(SGT).date()
+        for chat_id in service.db.active_chat_ids():
+            message_id = service.db.goal_summary_message_id(notification_date, chat_id=chat_id)
+            if message_id is None:
+                continue
+            prior_events = service.db.notification_events_for_day(notification_date, chat_id=chat_id)
+            if any(event["kind"] == "goal-summary-pin" and event["status"] == "sent" for event in prior_events):
+                continue
+            try:
+                pinned = telegram.pin_chat_message_sync(chat_id, message_id)
+                if not pinned:
+                    raise RuntimeError("pinChatMessage returned false")
+                service.db.record_notification_event(
+                    "goal-summary-pin",
+                    notification_date,
+                    chat_id=chat_id,
+                    status="sent",
+                    message_id=message_id,
+                )
+            except Exception as exc:
+                logger.exception("Scheduled goal summary pin failed", extra={"chat_id": chat_id, "kind": "goal-summary-pin"})
+                service.db.record_notification_event(
+                    "goal-summary-pin",
+                    notification_date,
+                    chat_id=chat_id,
+                    status="failed",
+                    message_id=message_id,
+                    error=str(exc),
+                )
+
     scheduler.add_job(
         lambda: send_to_all_active_chats("morning-goal-reminder", lambda chat_id: service.morning_reminder(chat_id=chat_id)),
         CronTrigger(hour=8, minute=0, timezone=SGT),
@@ -61,6 +92,12 @@ def build_scheduler(service: AccountabilityService, telegram: TelegramClient) ->
         ),
         CronTrigger(hour=10, minute=0, timezone=SGT),
         id="goal-deadline-summary",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        pin_goal_summary_for_all_active_chats,
+        CronTrigger(hour=22, minute=0, timezone=SGT),
+        id="goal-summary-pin",
         replace_existing=True,
     )
     for hour in (20, 22):

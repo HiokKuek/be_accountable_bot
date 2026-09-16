@@ -573,6 +573,41 @@ class Database:
             )
             return cursor.rowcount == 1
 
+    def set_notification_message_id(self, kind: str, notification_date: date, *, chat_id: int, message_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE notification_events
+                SET message_id=?
+                WHERE id = (
+                    SELECT id
+                    FROM notification_events
+                    WHERE chat_id=? AND notification_date=? AND kind=?
+                    ORDER BY id DESC
+                    LIMIT 1
+                )
+                """,
+                (message_id, chat_id, notification_date.isoformat(), kind),
+            )
+
+    def goal_summary_message_id(self, notification_date: date, *, chat_id: int) -> int | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT message_id
+                FROM notification_events
+                WHERE chat_id=?
+                  AND notification_date=?
+                  AND kind IN ('goals-keyed', 'goal-deadline-summary')
+                  AND status='sent'
+                  AND message_id IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (chat_id, notification_date.isoformat()),
+            ).fetchone()
+        return int(row["message_id"]) if row and row["message_id"] is not None else None
+
     def record_notification_event(
         self,
         kind: str,

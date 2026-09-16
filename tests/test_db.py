@@ -179,6 +179,18 @@ def test_claim_notification_once_is_group_and_day_scoped(tmp_path):
     assert events[0]["status"] == "sent"
 
 
+def test_goal_summary_message_id_prefers_latest_sent_summary_with_message_id(tmp_path):
+    db = Database(tmp_path / "test.sqlite3")
+    db.init()
+    day = date(2026, 7, 9)
+
+    db.claim_notification_once("goals-keyed", day, chat_id=100)
+    db.set_notification_message_id("goals-keyed", day, chat_id=100, message_id=111)
+    db.record_notification_event("goal-deadline-summary", day, chat_id=100, message_id=222)
+
+    assert db.goal_summary_message_id(day, chat_id=100) == 222
+
+
 def test_init_merges_legacy_notifications_into_notification_events_and_drops_old_table(tmp_path):
     db_path = tmp_path / "legacy.sqlite3"
     with sqlite3.connect(db_path) as conn:

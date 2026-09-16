@@ -124,5 +124,5 @@ async def telegram_webhook(
         ):
             message_id = await telegram.send_message(int(chat_id), service.goal_confirmation_summary(checkin_date, chat_id=int(chat_id)))
             if message_id is not None:
-                await telegram.pin_chat_message(int(chat_id), message_id)
+                db.set_notification_message_id("goals-keyed", checkin_date, chat_id=int(chat_id), message_id=message_id)
     return {"ok": True}
