@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 DEFAULT_OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+LEGACY_MODEL_ALIASES = {
+    "google/gemma-4-31b:free": "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b:free": "google/gemma-4-26b-a4b-it:free",
+}
 
 
 class OpenRouterUnavailable(RuntimeError):
@@ -16,8 +20,8 @@ class OpenRouterClient:
         self,
         *,
         api_key: str = "",
-        model: str = "google/gemma-4-31b:free",
-        fallback_model: str = "google/gemma-4-26b-a4b:free",
+        model: str = "google/gemma-4-31b-it:free",
+        fallback_model: str = "google/gemma-4-26b-a4b-it:free",
         api_url: str = DEFAULT_OPENROUTER_API_URL,
         site_url: str | None = None,
         app_name: str = "Mr Accountable",
@@ -66,7 +70,7 @@ class OpenRouterClient:
                     return content
                 errors.append(f"{model}: empty response")
             except Exception as exc:
-                errors.append(f"{model}: {exc}")
+                errors.append(f"{model}: {self._describe_error(exc)}")
 
         detail = errors[-1] if errors else "unknown OpenRouter failure"
         raise OpenRouterUnavailable(f"OpenRouter request failed ({detail}).")
@@ -85,11 +89,34 @@ class OpenRouterClient:
             return await client.post(self.api_url, headers=headers, json=payload)
 
     def _models_to_try(self) -> list[str]:
-        models = [self.model.strip()] if self.model.strip() else []
-        fallback = self.fallback_model.strip()
-        if fallback and fallback not in models:
-            models.append(fallback)
+        models: list[str] = []
+        for candidate in (self.model, self.fallback_model):
+            normalized = self._normalize_model(candidate)
+            if normalized and normalized not in models:
+                models.append(normalized)
         return models
+
+    @staticmethod
+    def _normalize_model(model: str) -> str:
+        cleaned = model.strip()
+        return LEGACY_MODEL_ALIASES.get(cleaned, cleaned)
+
+    @staticmethod
+    def _describe_error(exc: Exception) -> str:
+        if isinstance(exc, httpx.HTTPStatusError):
+            response = cast(httpx.HTTPStatusError, exc).response
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                error = payload.get("error")
+                if isinstance(error, dict) and error.get("message"):
+                    return str(error["message"])
+                if payload.get("message"):
+                    return str(payload["message"])
+            return str(exc)
+        return str(exc)
 
     @staticmethod
     def _extract_content(payload: dict[str, Any]) -> str:

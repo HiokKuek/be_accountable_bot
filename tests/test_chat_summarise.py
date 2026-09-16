@@ -71,7 +71,7 @@ def test_summarise_returns_configuration_hint_when_key_is_missing():
     buffer = ChatMessageBuffer()
     context = make_context()
     buffer.record(context, "hello team")
-    service = ChatSummariseService(OpenRouterClient(api_key="", model="google/gemma-4-31b:free"), buffer)
+    service = ChatSummariseService(OpenRouterClient(api_key="", model="google/gemma-4-31b-it:free"), buffer)
 
     response = asyncio.run(service.summarise(context))
 
@@ -83,7 +83,7 @@ def test_summarise_formats_and_escapes_openrouter_output():
     fake_http = FakeAsyncHttpClient(
         [FakeResponse({"choices": [{"message": {"content": "TL;DR:\n- <done> & celebrated"}}]})]
     )
-    client = OpenRouterClient(api_key="secret", model="google/gemma-4-31b:free", http_client=fake_http)
+    client = OpenRouterClient(api_key="secret", model="google/gemma-4-31b-it:free", http_client=fake_http)
     buffer = ChatMessageBuffer()
     context = make_context()
     buffer.record(context, "We finished the task", now=datetime(2026, 9, 16, 9, 0, tzinfo=SGT))
@@ -94,7 +94,7 @@ def test_summarise_formats_and_escapes_openrouter_output():
     assert "Chat Summary" in response
     assert "last 1 captured messages" in response
     assert "&lt;done&gt; &amp; celebrated" in response
-    assert fake_http.requests[0]["json"]["model"] == "google/gemma-4-31b:free"
+    assert fake_http.requests[0]["json"]["model"] == "google/gemma-4-31b-it:free"
     assert "We finished the task" in fake_http.requests[0]["json"]["messages"][1]["content"]
 
 
@@ -107,8 +107,8 @@ def test_openrouter_client_falls_back_to_secondary_model_after_failure():
     )
     client = OpenRouterClient(
         api_key="secret",
-        model="google/gemma-4-31b:free",
-        fallback_model="google/gemma-4-26b-a4b:free",
+        model="google/gemma-4-31b-it:free",
+        fallback_model="google/gemma-4-26b-a4b-it:free",
         http_client=fake_http,
     )
 
@@ -116,6 +116,19 @@ def test_openrouter_client_falls_back_to_secondary_model_after_failure():
 
     assert summary == "Fallback summary"
     assert [request["json"]["model"] for request in fake_http.requests] == [
-        "google/gemma-4-31b:free",
-        "google/gemma-4-26b-a4b:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+    ]
+
+
+def test_openrouter_client_normalizes_legacy_gemma_model_ids():
+    client = OpenRouterClient(
+        api_key="secret",
+        model="google/gemma-4-31b:free",
+        fallback_model="google/gemma-4-26b-a4b:free",
+    )
+
+    assert client._models_to_try() == [
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
     ]
